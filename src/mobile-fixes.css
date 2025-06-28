@@ -1,0 +1,34 @@
+/* Mobile landscape viewport fixes */
+body {
+  margin: 0 !important;
+  padding: 0 !important;
+  min-width: auto !important;
+  min-height: 100vh;
+  width: 100% !important;
+  overflow-x: hidden !important;
+}
+
+html {
+  width: 100% !important;
+  overflow-x: hidden !important;
+}
+
+#root {
+  width: 100% !important;
+  min-height: 100vh;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Ensure map takes full width */
+.leaflet-container {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Fix for mobile landscape */
+@media screen and (orientation: landscape) and (max-height: 500px) {
+  body {
+    min-width: auto !important;
+  }
+} 

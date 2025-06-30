@@ -3,6 +3,8 @@ import { auth } from "../services/firebase";
 import { ref, get, set } from "firebase/database";
 import { realtimeDb } from "../services/firebase";
 import { useLocation } from "../contexts/LocationContext";
+import LocationTest from "../components/LocationTest";
+import { Capacitor } from '@capacitor/core';
 
 interface OfficerProfile {
   email: string;
@@ -96,7 +98,7 @@ const ProfileSetup = () => {
   // Show profile view if profile exists and not in edit mode
   if (profile && !editMode) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900 p-2 pt-8 md:pt-12">
+      <div className={`min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900 p-2 pt-8 md:pt-12 ${Capacitor.isNativePlatform() ? 'pb-20' : ''}`}>
         <div className="bg-white dark:bg-gray-800 p-8 rounded shadow-md w-full max-w-md">
           <div className="flex flex-col items-center mb-6">
             <span className="text-4xl mb-2">👮</span>
@@ -136,7 +138,7 @@ const ProfileSetup = () => {
             disabled={locationLoading}
           >
             {locationLoading 
-              ? (isSharingLocation ? "Turning Off..." : "Sharing Location...") 
+              ? "Processing..." 
               : (isSharingLocation ? "Turn Off Location Sharing" : "Share My Location")
             }
           </button>
@@ -147,6 +149,11 @@ const ProfileSetup = () => {
           >
             Edit Profile
           </button>
+          
+          {/* Temporary Location Test Component */}
+          <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+            <LocationTest />
+          </div>
         </div>
       </div>
     );
@@ -154,7 +161,7 @@ const ProfileSetup = () => {
 
   // Show form if no profile or in edit mode
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900 p-6">
+    <div className={`min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900 p-6 ${Capacitor.isNativePlatform() ? 'pb-20' : ''}`}>
       <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 p-8 rounded shadow-md w-full max-w-md">
         <div className="flex flex-col items-center mb-6">
           <span className="text-4xl mb-2">👮</span>
@@ -217,7 +224,7 @@ const ProfileSetup = () => {
           disabled={locationLoading}
         >
           {locationLoading 
-            ? (isSharingLocation ? "Turning Off..." : "Sharing Location...") 
+            ? "Processing..." 
             : (isSharingLocation ? "Turn Off Location Sharing" : "Share My Location")
           }
         </button>

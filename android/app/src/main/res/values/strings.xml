@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Guimaras Patrol</string>
+    <string name="title_activity_main">Guimaras Patrol</string>
+    <string name="package_name">com.k3n.gpatrol</string>
+    <string name="custom_url_scheme">com.k3n.gpatrol</string>
+</resources>

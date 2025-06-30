@@ -14,6 +14,7 @@ export type Troop = {
   badgeNumber?: string;
   email?: string;
   lastUpdated?: number;
+  emergencyTriggeredAt?: number;
 };
 
 export const useTroops = () => {

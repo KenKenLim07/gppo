@@ -23,10 +23,10 @@ export const usePeriodicUpdates = (): UsePeriodicUpdatesReturn => {
       console.log("Cleared existing periodic update interval");
     }
 
-    console.log("Starting periodic location updates every 30 seconds...");
+    console.log("Starting periodic location updates every 1 minute...");
     console.log("Current state - isSharing:", isSharing, "lastKnownPosition:", lastKnownPosition);
 
-    // Update location every 30 seconds to keep timestamp fresh
+    // Update location every 1 minute to keep timestamp fresh
     periodicUpdateRef.current = setInterval(() => {
       console.log("Periodic update check - isSharing:", isSharing, "lastKnownPosition:", lastKnownPosition);
       
@@ -38,7 +38,7 @@ export const usePeriodicUpdates = (): UsePeriodicUpdatesReturn => {
       } else {
         console.log("Periodic update skipped - conditions not met");
       }
-    }, 30000); // Every 30 seconds
+    }, 60000); // Every 1 minute (60,000 ms)
 
     console.log("Periodic update interval set with ID:", periodicUpdateRef.current);
   }, []);

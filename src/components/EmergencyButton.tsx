@@ -112,29 +112,39 @@ const EmergencyButton = ({ variant = 'mobile' }: EmergencyButtonProps) => {
     );
   }
 
-  // Redesigned floating button: now inherits position from parent
   return (
-    <div>
-      <button
-        onClick={isTriggered ? handleEmergencyReset : handleEmergencyTrigger}
-        disabled={isLoading}
-        className={`flex items-center space-x-2 px-3 py-2 rounded-lg shadow-lg transition-all duration-200 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2
-          ${isTriggered ? 'bg-red-700 text-white animate-pulse' : 'bg-red-600 text-white hover:bg-red-700 disabled:bg-red-500'}`}
-        style={isTriggered ? { animation: 'staticPulse 0.8s infinite' } : {}}
-        aria-label={isTriggered ? 'Reset Emergency' : 'Trigger Emergency'}
-      >
-        {/* Icon */}
-        <span className="text-lg mr-1">🚨</span>
-        {/* Label */}
-        <span>{isLoading ? '...' : (isTriggered ? 'ALARM' : 'ALARM')}</span>
-      </button>
-      {isTriggered && (
-        <style>{`
-          @keyframes staticPulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-          }
-        `}</style>
+    <div className="fixed bottom-24 right-4 z-50">
+      {isTriggered ? (
+        // Emergency Active State
+        <div className="flex flex-col items-center space-y-2">
+          <button
+            onClick={handleEmergencyReset}
+            disabled={isLoading}
+            className="w-16 h-16 bg-red-600 hover:bg-red-700 disabled:bg-red-500 rounded-full shadow-lg flex items-center justify-center transition-all duration-200 animate-pulse"
+          >
+            {isLoading ? (
+              <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              <span className="text-white text-xl"></span>
+            )}
+          </button>
+          <div className="bg-red-600 text-white text-xs px-2 py-1 rounded-full font-medium">
+            EMERGENCY ACTIVE
+          </div>
+        </div>
+      ) : (
+        // Emergency Trigger Button
+        <button
+          onClick={handleEmergencyTrigger}
+          disabled={isLoading}
+          className="w-16 h-16 bg-red-600 hover:bg-red-700 disabled:bg-red-500 rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95"
+        >
+          {isLoading ? (
+            <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+          ) : (
+            <span className="text-white text-xl font-bold"></span>
+          )}
+        </button>
       )}
     </div>
   );

@@ -4,16 +4,15 @@ import { realtimeDb } from "../services/firebase";
 import { useAuth } from "./AuthContext";
 import { useGeolocation } from "../hooks/useGeolocation";
 import { usePeriodicUpdates } from "../hooks/usePeriodicUpdates";
-import { backgroundTrackingService, requestAllPermissions } from "../services/backgroundTracking";
+import { backgroundTrackingService } from "../services/backgroundTracking";
 import { 
   updateLocationInFirebase, 
   removeLocationFromFirebase, 
+  getLocationErrorMessage,
   isLocationRecent,
   type LocationData,
   getDistanceMeters
 } from "../utils/locationUtils";
-import { Capacitor } from '@capacitor/core';
-import { Geolocation } from '@capacitor/geolocation';
 
 interface LocationContextType {
   isSharingLocation: boolean;
@@ -48,7 +47,7 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
   const [backgroundTrackingActive, setBackgroundTrackingActive] = useState(false);
   
   const { user } = useAuth();
-  const { /* getLocationWithFallback, */ startLocationWatching, clearLocationWatching } = useGeolocation();
+  const { getLocationWithFallback, startLocationWatching, clearLocationWatching } = useGeolocation();
   const { startPeriodicUpdates, clearPeriodicUpdates } = usePeriodicUpdates();
   
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -265,69 +264,14 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
     );
   };
 
-  // Helper: Get user location with permission checks and improved logging
-  async function getUserLocation() {
-    if (Capacitor.isNativePlatform()) {
-      // Native: Use Capacitor Geolocation
-      let perm = await Geolocation.checkPermissions();
-      console.log('📋 Location permission status:', JSON.stringify(perm));
-      if (perm.location !== 'granted') {
-        perm = await Geolocation.requestPermissions();
-        console.log('📥 Requested Geo Permissions:', JSON.stringify(perm));
-        if (perm.location !== 'granted') {
-          alert("Location permission not granted.");
-          return null;
-        }
-      }
-      try {
-        const coords = await Geolocation.getCurrentPosition({
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 5000,
-        });
-        console.log("📍 Location from Capacitor:", coords);
-        return coords;
-      } catch (err) {
-        let msg = '';
-        if (err instanceof Error) msg = err.message;
-        else if (typeof err === 'object') msg = JSON.stringify(err);
-        else msg = String(err);
-        console.error("❌ Error getting location:", err, msg);
-        alert("Failed to get location: " + msg);
-        return null;
-      }
-    } else if ('geolocation' in navigator) {
-      // Web: Use browser geolocation
-      return new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            console.log("📍 Location from browser:", position);
-            resolve(position);
-          },
-          (err) => {
-            let msg = '';
-            if (err instanceof Error) msg = err.message;
-            else if (typeof err === 'object') msg = JSON.stringify(err);
-            else msg = String(err);
-            console.error("❌ Error getting location (web):", err, msg);
-            alert("Failed to get location: " + msg);
-            reject(err);
-          },
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
-        );
-      });
-    } else {
-      alert("Location API not supported on this platform.");
-      return null;
-    }
-  }
-
   const toggleLocation = async () => {
     if (!user) {
       console.log("No user found");
       return;
     }
-    console.log("Toggle clicked. Current state:", JSON.stringify({ isSharingLocation, locationLoading }));
+    
+    console.log("Toggle clicked. Current state:", { isSharingLocation, locationLoading });
+    
     if (isSharingLocation) {
       // Turn off location sharing
       console.log("Turning OFF location sharing");
@@ -336,89 +280,78 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
       setLocationLoading(true);
       setLocationError(null);
       setIsLive(false);
+      
       // Clear all timers and watchers
       if (retryTimeoutRef.current) {
         clearTimeout(retryTimeoutRef.current);
         retryTimeoutRef.current = null;
-        console.log("Cleared retryTimeoutRef");
       }
       clearLocationWatching(currentWatchIdRef.current);
-      console.log("Cleared location watcher");
       clearPeriodicUpdates();
-      console.log("Cleared periodic updates");
+      
       currentWatchIdRef.current = null;
       lastKnownPositionRef.current = null;
+      
       // Reset error count
       consecutiveErrorsRef.current = 0;
+      
       try {
         await removeLocationFromFirebase(user.uid);
         setLocationData(null);
         console.log("Location sharing turned OFF successfully");
       } catch (error) {
-        console.error("Error turning off location:", error, JSON.stringify(error));
+        console.error("Error turning off location:", error);
       }
       setLocationLoading(false);
-      return;
-    }
-    // Turn on location sharing
-    console.log("Turning ON location sharing");
-    setLocationError(null);
-    setLocationLoading(true);
-    setIsSharingLocation(true);
-    isSharingRef.current = true;
-    console.log("Location state set to true, starting geolocation...");
-    // Use improved permission and location logic
-    const position = await getUserLocation();
-    if (!position) {
-      setIsSharingLocation(false);
-      isSharingRef.current = false;
-      setIsLive(false);
+    } else {
+      // Turn on location sharing
+      console.log("Turning ON location sharing");
+      setLocationError(null);
+      
+      if (!navigator.geolocation) {
+        const error = "Geolocation is not supported by this browser";
+        console.error(error);
+        setLocationError(error);
+        return;
+      }
+      
+      setLocationLoading(true);
+      setIsSharingLocation(true);
+      isSharingRef.current = true;
+      
+      console.log("Location state set to true, starting geolocation...");
+      
+      try {
+        const position = await getLocationWithFallback();
+        console.log("Location received:", position.coords);
+        
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        const currentTime = Date.now();
+        
+        await handleLocationUpdate(lat, lng, currentTime);
+        console.log("Location saved to Firebase successfully");
+        
+        // Reset error count on successful start
+        consecutiveErrorsRef.current = 0;
+        
+        // Start continuous tracking
+        console.log("About to call startLocationTracking...");
+        startLocationTracking();
+        console.log("startLocationTracking called successfully");
+        
+      } catch (error: any) {
+        console.error("Error getting initial location:", error);
+        
+        const errorMessage = getLocationErrorMessage(error);
+        setLocationError(errorMessage);
+        setIsSharingLocation(false);
+        isSharingRef.current = false;
+        setIsLive(false);
+      }
+      
       setLocationLoading(false);
-      return;
     }
-    try {
-      // Handle both Capacitor and browser geolocation result types
-      let lat: number | undefined;
-      let lng: number | undefined;
-      if (position && typeof position === 'object') {
-        if ('coords' in position && position.coords && typeof position.coords === 'object') {
-          // Browser geolocation or Capacitor (web)
-          lat = (position as any).coords.latitude;
-          lng = (position as any).coords.longitude;
-        } else if ('latitude' in position && 'longitude' in position) {
-          // Capacitor native result
-          lat = (position as any).latitude;
-          lng = (position as any).longitude;
-        }
-      }
-      if (typeof lat !== 'number' || typeof lng !== 'number') {
-        throw new Error('Could not extract latitude/longitude from geolocation result');
-      }
-      const currentTime = Date.now();
-      await handleLocationUpdate(lat, lng, currentTime);
-      console.log("Location saved to Firebase successfully");
-      // Reset error count on successful start
-      consecutiveErrorsRef.current = 0;
-      // Start continuous tracking
-      console.log("About to call startLocationTracking...");
-      startLocationTracking();
-      console.log("startLocationTracking called successfully");
-    } catch (error) {
-      let msg = '';
-      if (error instanceof Error) {
-        msg = error.message;
-      } else if (typeof error === 'object') {
-        msg = JSON.stringify(error);
-      } else {
-        msg = String(error);
-      }
-      console.error("Error getting initial location:", error, msg);
-      setLocationError(msg);
-      setIsSharingLocation(false);
-      isSharingRef.current = false;
-      setIsLive(false);
-    }
-    setLocationLoading(false);
   };
 
   const toggleBackgroundTracking = async () => {
@@ -429,39 +362,25 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
 
     try {
       if (backgroundTrackingActive) {
-        console.log("Stopping background tracking...");
+        // Stop background tracking
         await backgroundTrackingService.stopTracking();
         setBackgroundTrackingActive(false);
         console.log("Background tracking stopped");
-        return;
-      }
-
-      // 1. Check/request permissions
-      let perm;
-      try {
-        perm = await requestAllPermissions();
-        console.log("Permission result:", perm);
-      } catch (e) {
-        console.error("Error requesting permissions for background tracking:", e);
-        setLocationError("Failed to request background location permissions.");
-        return;
-      }
-
-      // 2. If not granted, guide user to settings (only once)
-      if (perm.location !== 'granted' && perm.always !== 'granted') {
-        setLocationError("Background location or notification permission denied. Please enable in settings.");
-        console.warn("Permission denied for background location or notifications.", perm);
-        if (window.confirm("Permission denied. Open app settings to enable?")) {
-          await backgroundTrackingService.openSettings();
+      } else {
+        // Start background tracking
+        const hasPermission = await backgroundTrackingService.checkPermissions();
+        if (!hasPermission) {
+          const granted = await backgroundTrackingService.requestPermissions();
+          if (!granted) {
+            setLocationError("Background location permission denied");
+            return;
+          }
         }
-        return;
-      }
 
-      // 3. Start background tracking
-      console.log("Starting background tracking...");
-      await backgroundTrackingService.startTracking();
-      setBackgroundTrackingActive(true);
-      console.log("Background tracking started");
+        await backgroundTrackingService.startTracking();
+        setBackgroundTrackingActive(true);
+        console.log("Background tracking started");
+      }
     } catch (error: any) {
       console.error("Error toggling background tracking:", error);
       setLocationError(`Background tracking error: ${error.message}`);

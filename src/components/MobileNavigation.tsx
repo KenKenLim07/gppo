@@ -107,6 +107,9 @@ const MobileNavigation = () => {
         </div>
       </div>
 
+      {/* Emergency Button */}
+      <EmergencyButton />
+
       {/* Floating Location Controls */}
       <div className="fixed top-4 right-4 z-[10001] space-y-2">
         {/* Location Toggle */}
@@ -138,9 +141,6 @@ const MobileNavigation = () => {
             isLive={backgroundTrackingActive}
           />
         </div>
-
-        {/* Emergency Button - now under the toggles */}
-        <EmergencyButton />
       </div>
 
       {/* Drawer Menu */}

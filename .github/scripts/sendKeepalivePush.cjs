@@ -21,6 +21,7 @@ const message = {
 };
 
 (async () => {
+  console.log('Sending keepalive push to tokens:', tokens);
   for (const token of tokens) {
     try {
       const response = await admin.messaging().send({ ...message, token });

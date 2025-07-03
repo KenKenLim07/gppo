@@ -19,4 +19,4 @@ jobs:
       - name: Run keepalive push script
         env:
           FCM_SERVICE_ACCOUNT: ${{ secrets.FCM_SERVICE_ACCOUNT }}
-        run: node .github/scripts/sendKeepalivePush.js 
+        run: node .github/scripts/sendKeepalivePush.cjs 

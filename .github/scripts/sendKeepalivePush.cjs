@@ -1,7 +1,7 @@
 const admin = require('firebase-admin');
 
-// Load service account from environment variable
-const serviceAccount = JSON.parse(process.env.FCM_SERVICE_ACCOUNT);
+// Load service account from environment variable (now FCM_KEY)
+const serviceAccount = JSON.parse(process.env.FCM_KEY);
 
 // Initialize Firebase Admin
 admin.initializeApp({

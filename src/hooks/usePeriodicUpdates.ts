@@ -4,18 +4,21 @@ interface UsePeriodicUpdatesReturn {
   startPeriodicUpdates: (
     isSharing: boolean,
     lastKnownPosition: { lat: number; lng: number } | null,
-    onUpdate: (lat: number, lng: number, timestamp: number) => void
+    onUpdate: (lat: number, lng: number, timestamp: number) => void,
+    getSpeed?: () => number | null
   ) => void;
   clearPeriodicUpdates: () => void;
 }
 
 export const usePeriodicUpdates = (): UsePeriodicUpdatesReturn => {
   const periodicUpdateRef = useRef<NodeJS.Timeout | null>(null);
+  const lastIntervalMsRef = useRef<number | null>(null);
 
   const startPeriodicUpdates = useCallback((
     isSharing: boolean,
     lastKnownPosition: { lat: number; lng: number } | null,
-    onUpdate: (lat: number, lng: number, timestamp: number) => void
+    onUpdate: (lat: number, lng: number, timestamp: number) => void,
+    getSpeed?: () => number | null
   ) => {
     // Clear any existing interval
     if (periodicUpdateRef.current) {
@@ -23,24 +26,39 @@ export const usePeriodicUpdates = (): UsePeriodicUpdatesReturn => {
       console.log("Cleared existing periodic update interval");
     }
 
-    console.log("Starting periodic location updates every 5 minutes...");
-    console.log("Current state - isSharing:", isSharing, "lastKnownPosition:", lastKnownPosition);
+    // Helper to determine interval based on speed
+    const getIntervalMs = () => {
+      if (!getSpeed) return 300000; // fallback 5 min
+      const speed = getSpeed();
+      if (speed == null) return 300000;
+      if (speed > 5) return 60000; // >18 km/h: 1 min
+      if (speed > 1) return 120000; // >3.6 km/h: 2 min
+      return 600000; // else: 10 min
+    };
 
-    // Update location every 5 minutes to keep timestamp fresh
-    periodicUpdateRef.current = setInterval(() => {
-      console.log("Periodic update check - isSharing:", isSharing, "lastKnownPosition:", lastKnownPosition);
-      
-      if (isSharing && lastKnownPosition) {
-        const currentTime = Date.now();
-        console.log("Periodic update triggered at:", new Date(currentTime).toLocaleTimeString());
-        
-        onUpdate(lastKnownPosition.lat, lastKnownPosition.lng, currentTime);
-      } else {
-        console.log("Periodic update skipped - conditions not met");
-      }
-    }, 300000); // Every 5 minutes (300,000 ms)
+    const setupInterval = () => {
+      const intervalMs = getIntervalMs();
+      lastIntervalMsRef.current = intervalMs;
+      periodicUpdateRef.current = setInterval(() => {
+        if (isSharing && lastKnownPosition) {
+          const currentTime = Date.now();
+          console.log("[Adaptive] Periodic update triggered at:", new Date(currentTime).toLocaleTimeString());
+          onUpdate(lastKnownPosition.lat, lastKnownPosition.lng, currentTime);
+        } else {
+          console.log("[Adaptive] Periodic update skipped - conditions not met");
+        }
+        // Check if speed category changed, and if so, restart interval
+        const newInterval = getIntervalMs();
+        if (newInterval !== lastIntervalMsRef.current) {
+          console.log("[Adaptive] Speed category changed, restarting interval to", newInterval, "ms");
+          clearInterval(periodicUpdateRef.current!);
+          setupInterval();
+        }
+      }, intervalMs);
+      console.log("[Adaptive] Periodic update interval set to", intervalMs, "ms");
+    };
 
-    console.log("Periodic update interval set with ID:", periodicUpdateRef.current);
+    setupInterval();
   }, []);
 
   const clearPeriodicUpdates = useCallback(() => {

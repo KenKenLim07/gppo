@@ -9,6 +9,8 @@ import ToggleSwitch from "./ToggleSwitch";
 import ErrorModal from "./ErrorModal";
 import EmergencyButton from "./EmergencyButton";
 import { Capacitor } from '@capacitor/core';
+import { ref } from "firebase/database";
+import { realtimeDb } from "../services/firebase";
 
 const NavBar = () => {
   const location = useLocation();
@@ -32,6 +34,8 @@ const NavBar = () => {
     toggleBackgroundTracking
   } = useLocationContext();
   const isProcessingClick = useRef(false);
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   // Only show background tracking on native platforms
   const isNative = Capacitor.isNativePlatform();
@@ -47,6 +51,70 @@ const NavBar = () => {
       });
     }
   }, [locationError]);
+
+  // Fetch current status on mount (for mobile menu)
+  useEffect(() => {
+    if (!user) return;
+    const profileRef = ref(realtimeDb, `users/${user.uid}`);
+    import('firebase/database').then(({ get }) => {
+      get(profileRef).then((snapshot) => {
+        if (snapshot.exists()) {
+          // Profile data fetched, but not used
+        }
+      });
+    });
+  }, [user]);
+
+  // Close dropdown on click outside or ESC
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node) &&
+        menuButtonRef.current &&
+        !menuButtonRef.current.contains(e.target as Node)
+      ) {
+        setMenuOpen(false);
+      }
+    }
+    function handleEsc(e: KeyboardEvent) {
+      if (e.key === "Escape") setMenuOpen(false);
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEsc);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, [menuOpen]);
+
+  // Focus trap for dropdown
+  useEffect(() => {
+    if (!menuOpen || !dropdownRef.current) return;
+    const focusable = dropdownRef.current.querySelectorAll<HTMLElement>(
+      'a, button, [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusable.length) focusable[0].focus();
+    function handleTab(e: KeyboardEvent) {
+      if (e.key !== "Tab") return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+    document.addEventListener("keydown", handleTab);
+    return () => document.removeEventListener("keydown", handleTab);
+  }, [menuOpen]);
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -172,12 +240,16 @@ const NavBar = () => {
 
             {/* Mobile menu button */}
             <button
+              ref={menuButtonRef}
               onClick={handleMenuToggle}
-              className="md:hidden text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 focus:outline-none border-0 bg-transparent p-0"
+              className="md:hidden text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 focus:outline-none border-0 bg-transparent p-0 relative"
+              aria-haspopup="true"
+              aria-expanded={menuOpen}
+              aria-controls="mobile-menu-dropdown"
               style={{ outline: 'none', border: 'none', background: 'transparent' }}
             >
               <svg
-                className="h-5 w-5"
+                className="h-7 w-7"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -202,57 +274,94 @@ const NavBar = () => {
           </div>
         </div>
 
-        {/* Mobile menu */}
-        {menuOpen && (
-          <div className="md:hidden absolute top-full left-0 right-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-lg z-[10001]">
-            <div className="px-4 py-2 space-y-2">
-              <Link
-                to="/map"
-                onClick={handleNavClick}
-                className={`block text-sm font-medium transition ${
-                  location.pathname === "/map"
-                    ? "text-blue-600 dark:text-blue-400"
-                    : "text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
-                }`}
-              >
-                Map
-              </Link>
-              <Link
-                to="/profile"
-                onClick={handleNavClick}
-                className={`block text-sm font-medium transition ${
-                  location.pathname === "/profile"
-                    ? "text-blue-600 dark:text-blue-400"
-                    : "text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
-                }`}
-              >
-                Profile
-              </Link>
-              
-              {/* Admin Access Button - Only show for admin users */}
-              {isAdmin && (
-                <Link
-                  to="/admin"
-                  onClick={handleNavClick}
-                  className={`block text-sm font-medium transition ${
-                    location.pathname.startsWith("/admin")
-                      ? "text-red-600 dark:text-red-400"
-                      : "text-red-700 dark:text-red-300 hover:text-red-600 dark:hover:text-red-400"
-                  }`}
-                >
-                  Admin
-                </Link>
+        {/* Professional Dropdown Mobile Menu */}
+        <div className="relative md:hidden">
+          {menuOpen && (
+            <div
+              ref={dropdownRef}
+              id="mobile-menu-dropdown"
+              role="menu"
+              aria-labelledby="mobile-menu-button"
+              tabIndex={-1}
+              className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-xl rounded-xl z-[10001] animate-dropdown-fade-scale origin-top-right focus:outline-none"
+              style={{ minWidth: '12rem' }}
+            >
+              {/* Arrow */}
+              <div className="absolute -top-2 right-4 w-4 h-4 overflow-hidden">
+                <svg width="16" height="16" viewBox="0 0 16 16" className="block mx-auto">
+                  <polygon points="8,0 16,16 0,16" fill="white" className="dark:fill-gray-800" />
+                  <polygon points="8,1 15,15 1,15" fill="#e5e7eb" className="dark:fill-gray-700" />
+                </svg>
+              </div>
+              {/* User Info */}
+              {user && (
+                <div className="flex items-center gap-3 px-4 py-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-700">
+                  <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg">
+                    {user.email?.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-gray-900 dark:text-white truncate">{user.email}</div>
+                  </div>
+                </div>
               )}
-              
-              <button
-                onClick={handleLogout}
-                className="block w-full text-left text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 transition"
-              >
-                Logout
-              </button>
+              <div className="flex flex-col py-2">
+                <Link
+                  to="/map"
+                  onClick={handleNavClick}
+                  className={`flex items-center gap-3 px-5 py-3 text-base font-medium transition rounded-none hover:bg-blue-50 dark:hover:bg-blue-900/20 ${
+                    location.pathname === "/map"
+                      ? "text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/30 font-bold"
+                      : "text-gray-700 dark:text-gray-200"
+                  }`}
+                  role="menuitem"
+                  tabIndex={0}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 4m0 13V4m-6 3l6-3" /></svg>
+                  Map
+                </Link>
+                <Link
+                  to="/profile"
+                  onClick={handleNavClick}
+                  className={`flex items-center gap-3 px-5 py-3 text-base font-medium transition rounded-none hover:bg-blue-50 dark:hover:bg-blue-900/20 ${
+                    location.pathname === "/profile"
+                      ? "text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/30 font-bold"
+                      : "text-gray-700 dark:text-gray-200"
+                  }`}
+                  role="menuitem"
+                  tabIndex={0}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                  Profile
+                </Link>
+                {isAdmin && (
+                  <Link
+                    to="/admin"
+                    onClick={handleNavClick}
+                    className={`flex items-center gap-3 px-5 py-3 text-base font-medium transition rounded-none hover:bg-red-50 dark:hover:bg-red-900/20 ${
+                      location.pathname.startsWith("/admin")
+                        ? "text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30 font-bold"
+                        : "text-red-700 dark:text-red-300"
+                    }`}
+                    role="menuitem"
+                    tabIndex={0}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v4a1 1 0 001 1h3m10-5h2a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2h2" /></svg>
+                    Admin
+                  </Link>
+                )}
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-3 px-5 py-3 text-base font-medium text-red-600 dark:text-red-400 transition rounded-none hover:bg-red-50 dark:hover:bg-red-900/20"
+                  role="menuitem"
+                  tabIndex={0}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                  Logout
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </nav>
 
       {/* Error Modal */}

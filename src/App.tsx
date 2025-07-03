@@ -11,6 +11,8 @@ import NetworkStatus from "./components/NetworkStatus";
 import RequireAuth from "./components/RequireAuth";
 import { useAuth } from "./contexts/AuthContext";
 import { AdminProvider } from "./contexts/AdminContext";
+import { useEffect } from "react";
+import { registerPush } from "./services/pushNotifications";
 
 function AppRoutes() {
   const location = useLocation();
@@ -19,9 +21,20 @@ function AppRoutes() {
   // Detect platform
   const isNative = Capacitor.isNativePlatform();
   
-  // Show navigation on all routes except login and signup, but only if user is authenticated
+  // Register push notifications on native platforms
+  useEffect(() => {
+    if (isNative) {
+      registerPush();
+    }
+  }, [isNative]);
+  
+  // Show navigation on all routes except login, signup, and profile, but only if user is authenticated
   // Don't show navigation while auth is loading to prevent flickering
-  const showNavigation = !loading && user && (location.pathname !== "/" && location.pathname !== "/signup");
+  const showNavigation = !loading && user && (
+    location.pathname !== "/" &&
+    location.pathname !== "/signup" &&
+    location.pathname !== "/profile"
+  );
 
   console.log("AppRoutes render - showNavigation:", showNavigation, "user:", !!user, "loading:", loading, "location:", location.pathname, "platform:", isNative ? "native" : "web");
 

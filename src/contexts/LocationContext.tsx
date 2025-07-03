@@ -56,9 +56,60 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
   const lastKnownPositionRef = useRef<{ lat: number; lng: number } | null>(null);
   const isSharingRef = useRef(false);
   const currentWatchIdRef = useRef<string | null>(null);
+  const positionHistoryRef = useRef<{ lat: number; lng: number; timestamp: number }[]>([]);
 
   const MIN_MOVEMENT_METERS = 10; // Only update if moved at least 10 meters
   const MAX_ACCEPTABLE_ACCURACY = 50; // Only update if accuracy is better than 50m
+
+  // Smoothing: moving average of last N positions
+  const getSmoothedPosition = () => {
+    const history = positionHistoryRef.current;
+    if (history.length === 0) return null;
+    const avgLat = history.reduce((sum, p) => sum + p.lat, 0) / history.length;
+    const avgLng = history.reduce((sum, p) => sum + p.lng, 0) / history.length;
+    return { lat: avgLat, lng: avgLng };
+  };
+
+  // Speed/heading validation
+  const MAX_SPEED_MPS = 60; // 216 km/h
+  const MAX_TIME_GAP_MS = 10 * 60 * 1000; // 10 minutes
+  const isPlausibleMovement = (prev: { lat: number; lng: number; timestamp: number } | null, next: { lat: number; lng: number; timestamp: number }) => {
+    if (!prev) return true;
+    const timeDeltaMs = next.timestamp - prev.timestamp;
+    if (timeDeltaMs > MAX_TIME_GAP_MS) return true; // Accept big jumps after long gaps
+    const dist = getDistanceMeters(prev.lat, prev.lng, next.lat, next.lng);
+    const speed = dist / (timeDeltaMs / 1000); // m/s
+    return speed < MAX_SPEED_MPS;
+  };
+
+  // For exponential backoff
+  const baseRetryDelay = 5000; // 5 seconds
+  const maxRetryDelay = 5 * 60 * 1000; // 5 minutes
+  const backoffRef = useRef(baseRetryDelay);
+
+  // For offline queueing
+  const OFFLINE_QUEUE_KEY = 'location_offline_queue';
+  const enqueueOfflineUpdate = (lat: number, lng: number, timestamp: number) => {
+    const queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || '[]');
+    queue.push({ lat, lng, timestamp });
+    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+    console.log('[Offline] Queued location update:', { lat, lng, timestamp });
+  };
+  const flushOfflineQueue = async () => {
+    if (!user) return;
+    const queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY) || '[]');
+    if (queue.length === 0) return;
+    for (const item of queue) {
+      try {
+        await updateLocationInFirebase(user.uid, item.lat, item.lng, item.timestamp);
+        console.log('[Offline] Flushed queued update:', item);
+      } catch (err) {
+        console.error('[Offline] Failed to flush queued update:', item, err);
+        break; // Stop if any fail
+      }
+    }
+    localStorage.removeItem(OFFLINE_QUEUE_KEY);
+  };
 
   // Initialize background tracking service on mount
   useEffect(() => {
@@ -136,7 +187,7 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
     };
   }, [clearLocationWatching, clearPeriodicUpdates]);
 
-  const handleLocationUpdate = async (lat: number, lng: number, timestamp: number, accuracy?: number) => {
+  const handleLocationUpdate = async (lat: number, lng: number, timestamp: number, accuracy?: number, forceUpdate: boolean = false) => {
     if (!user) return;
     
     // Validate coordinates
@@ -152,7 +203,7 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
     }
 
     // Check for extreme coordinate changes (likely GPS errors)
-    if (lastKnownPositionRef.current) {
+    if (!forceUpdate && lastKnownPositionRef.current) {
       const dist = getDistanceMeters(lat, lng, lastKnownPositionRef.current.lat, lastKnownPositionRef.current.lng);
       if (dist < MIN_MOVEMENT_METERS) {
         console.log('Ignoring update, not enough movement:', dist, 'meters');
@@ -170,14 +221,39 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
       }
     }
 
+    // Speed/heading validation
+    const prev = positionHistoryRef.current.length > 0 ? positionHistoryRef.current[positionHistoryRef.current.length - 1] : null;
+    const next = { lat, lng, timestamp };
+    if (!isPlausibleMovement(prev, next)) {
+      console.warn('Ignoring update due to implausible speed. Prev:', prev, 'Next:', next);
+      return;
+    }
+
+    // Add to history for smoothing
+    positionHistoryRef.current.push({ lat, lng, timestamp });
+    if (positionHistoryRef.current.length > 5) positionHistoryRef.current.shift();
+
+    // Use smoothed position
+    const smoothed = getSmoothedPosition();
+    const finalLat = smoothed ? smoothed.lat : lat;
+    const finalLng = smoothed ? smoothed.lng : lng;
+
     try {
-      await updateLocationInFirebase(user.uid, lat, lng, timestamp);
-      setLocationData({ lat, lng, lastUpdated: timestamp });
+      await updateLocationInFirebase(user.uid, finalLat, finalLng, timestamp);
+      setLocationData({ lat: finalLat, lng: finalLng, lastUpdated: timestamp });
       setIsLive(true);
       lastLocationTimeRef.current = timestamp;
-      lastKnownPositionRef.current = { lat, lng };
+      lastKnownPositionRef.current = { lat: finalLat, lng: finalLng };
+      // Try to flush any offline queue if online
+      if (navigator.onLine) {
+        flushOfflineQueue();
+      }
     } catch (error) {
       console.error("Error updating location:", error);
+      // If offline, queue the update
+      if (!navigator.onLine) {
+        enqueueOfflineUpdate(finalLat, finalLng, timestamp);
+      }
     }
   };
 
@@ -196,34 +272,48 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
     // Only show error and potentially stop sharing after multiple consecutive failures
     if (consecutiveErrorsRef.current >= 3) {
       if (error.code === error.PERMISSION_DENIED) {
-        setLocationError("Location permission denied. Please enable location access in your browser settings.");
+        setLocationError("Location permission denied. Please enable location access in your browser settings.\nGo to your browser or device settings to re-enable location for this app.");
         setIsSharingLocation(false);
         isSharingRef.current = false;
         setIsLive(false);
+        // Optionally, show a UI prompt/modal here for user action
       } else if (error.code === error.POSITION_UNAVAILABLE) {
         setLocationError("Location services temporarily unavailable. Retrying...");
         setIsLive(false);
-        // Retry after a delay
+        // Exponential backoff for retries
         retryTimeoutRef.current = setTimeout(() => {
           if (isSharingRef.current) {
-            console.log("Retrying location watch after error...");
+            console.log("[Backoff] Retrying location watch after error...");
             startLocationTracking();
+            // Increase backoff (up to max)
+            backoffRef.current = Math.min(backoffRef.current * 2, maxRetryDelay);
           }
-        }, 10000); // Retry after 10 seconds
+        }, backoffRef.current);
       }
     } else {
       // For first few errors, just show a temporary message
       setLocationError("GPS signal weak. Trying to reconnect...");
       setIsLive(false);
-      // Retry after a shorter delay
+      // Exponential backoff for retries (reset to base for first errors)
       retryTimeoutRef.current = setTimeout(() => {
         if (isSharingRef.current) {
-          console.log("Retrying location watch after temporary error...");
+          console.log("[Backoff] Retrying location watch after temporary error...");
           startLocationTracking();
+          backoffRef.current = Math.min(backoffRef.current * 2, maxRetryDelay);
         }
-      }, 5000); // Retry after 5 seconds
+      }, backoffRef.current);
     }
   };
+
+  // Listen for online event to flush offline queue
+  useEffect(() => {
+    const handleOnline = () => {
+      flushOfflineQueue();
+      backoffRef.current = baseRetryDelay; // Reset backoff on reconnect
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, []);
 
   const startLocationTracking = () => {
     console.log("startLocationTracking called - user:", !!user, "isSharingRef:", isSharingRef.current);
@@ -255,12 +345,24 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
       handleLocationError
     );
 
-    // Start periodic updates (every 5 minutes for timestamp freshness, not location)
+    // Start periodic updates (adaptive frequency)
     console.log("Calling startPeriodicUpdates...");
+    // Helper to get current speed (m/s) from last two positions
+    const getSpeed = () => {
+      const h = positionHistoryRef.current;
+      if (h.length < 2) return null;
+      const prev = h[h.length - 2];
+      const curr = h[h.length - 1];
+      const dist = getDistanceMeters(prev.lat, prev.lng, curr.lat, curr.lng);
+      const timeDelta = (curr.timestamp - prev.timestamp) / 1000; // seconds
+      if (timeDelta <= 0) return null;
+      return dist / timeDelta;
+    };
     startPeriodicUpdates(
       isSharingRef.current,
       lastKnownPositionRef.current,
-      (lat, lng, timestamp) => handleLocationUpdate(lat, lng, timestamp, 0) // Pass 0 accuracy for periodic
+      (lat, lng, timestamp) => handleLocationUpdate(lat, lng, timestamp, 0, true),
+      getSpeed
     );
   };
 

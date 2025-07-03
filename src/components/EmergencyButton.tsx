@@ -85,11 +85,11 @@ const EmergencyButton = ({ variant = 'mobile' }: EmergencyButtonProps) => {
 
   if (variant === 'web') {
     return (
-      <div className="flex items-center space-x-2 w-20">
+      <div className="flex items-center space-x-1 w-12">
         <button
           onClick={isTriggered ? handleEmergencyReset : handleEmergencyTrigger}
           disabled={isLoading}
-          className={`px-2 py-1 text-white text-xs font-medium rounded transition-all duration-200 w-full ${
+          className={`w-8 h-8 flex items-center justify-center rounded-full transition-all duration-200 border border-red-700 shadow-sm p-0 ${
             isTriggered 
               ? 'bg-red-700 animate-pulse' 
               : 'bg-red-600 hover:bg-red-700 disabled:bg-red-500'
@@ -97,8 +97,16 @@ const EmergencyButton = ({ variant = 'mobile' }: EmergencyButtonProps) => {
           style={isTriggered ? {
             animation: 'staticPulse 0.8s infinite'
           } : {}}
+          aria-label="Emergency Alarm"
         >
-          {isLoading ? '...' : 'ALARM'}
+          {isLoading ? (
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+          ) : (
+            // Alarm icon SVG
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 19a2 2 0 002-2H10a2 2 0 002 2zm6.364-2.364A9 9 0 003 16.636M21 16.636A9 9 0 006.636 3M17 9V7a5 5 0 00-10 0v2m-2 0h14" />
+            </svg>
+          )}
         </button>
         {isTriggered && (
           <style>{`
@@ -113,37 +121,48 @@ const EmergencyButton = ({ variant = 'mobile' }: EmergencyButtonProps) => {
   }
 
   return (
-    <div className="fixed bottom-24 right-4 z-50">
+    <div className="fixed top-24 right-4 z-[10001]">
       {isTriggered ? (
         // Emergency Active State
-        <div className="flex flex-col items-center space-y-2">
-          <button
-            onClick={handleEmergencyReset}
-            disabled={isLoading}
-            className="w-16 h-16 bg-red-600 hover:bg-red-700 disabled:bg-red-500 rounded-full shadow-lg flex items-center justify-center transition-all duration-200 animate-pulse"
-          >
-            {isLoading ? (
-              <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-            ) : (
-              <span className="text-white text-xl"></span>
-            )}
-          </button>
-          <div className="bg-red-600 text-white text-xs px-2 py-1 rounded-full font-medium">
-            EMERGENCY ACTIVE
-          </div>
-        </div>
+        <button
+          onClick={handleEmergencyReset}
+          disabled={isLoading}
+          className="w-8 h-8 bg-red-600 hover:bg-red-700 disabled:bg-red-500 rounded-full shadow flex items-center justify-center transition-all duration-200 relative group animate-pulse border border-red-700 p-0"
+          aria-label="Emergency Alarm"
+        >
+          {isLoading ? (
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+          ) : (
+            // Alarm icon SVG
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 19a2 2 0 002-2H10a2 2 0 002 2zm6.364-2.364A9 9 0 003 16.636M21 16.636A9 9 0 006.636 3M17 9V7a5 5 0 00-10 0v2m-2 0h14" />
+            </svg>
+          )}
+          {/* Tooltip */}
+          <span className="absolute left-1/2 -bottom-7 -translate-x-1/2 bg-gray-900 text-white text-[10px] rounded px-2 py-0.5 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10 whitespace-nowrap shadow-lg">
+            Emergency
+          </span>
+        </button>
       ) : (
         // Emergency Trigger Button
         <button
           onClick={handleEmergencyTrigger}
           disabled={isLoading}
-          className="w-16 h-16 bg-red-600 hover:bg-red-700 disabled:bg-red-500 rounded-full shadow-lg flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95"
+          className="w-8 h-8 bg-red-600 hover:bg-red-700 disabled:bg-red-500 rounded-full shadow flex items-center justify-center transition-all duration-200 relative group hover:scale-105 active:scale-95 border border-red-700 p-0"
+          aria-label="Emergency Alarm"
         >
           {isLoading ? (
-            <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
           ) : (
-            <span className="text-white text-xl font-bold"></span>
+            // Alarm icon SVG
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 19a2 2 0 002-2H10a2 2 0 002 2zm6.364-2.364A9 9 0 003 16.636M21 16.636A9 9 0 006.636 3M17 9V7a5 5 0 00-10 0v2m-2 0h14" />
+            </svg>
           )}
+          {/* Tooltip */}
+          <span className="absolute left-1/2 -bottom-7 -translate-x-1/2 bg-gray-900 text-white text-[10px] rounded px-2 py-0.5 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10 whitespace-nowrap shadow-lg">
+            Emergency
+          </span>
         </button>
       )}
     </div>

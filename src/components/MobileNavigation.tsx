@@ -107,11 +107,8 @@ const MobileNavigation = () => {
         </div>
       </div>
 
-      {/* Emergency Button */}
-      <EmergencyButton />
-
       {/* Floating Location Controls */}
-      <div className="fixed top-4 right-4 z-[10001] space-y-2">
+      <div className="fixed top-4 right-4 z-[10001] space-y-2 flex flex-col items-end">
         {/* Location Toggle */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-2 border border-gray-200 dark:border-gray-700">
           <ToggleSwitch
@@ -141,6 +138,9 @@ const MobileNavigation = () => {
             isLive={backgroundTrackingActive}
           />
         </div>
+
+        {/* Compact Floating SOS Button */}
+        <EmergencyButton variant="mobile" />
       </div>
 
       {/* Drawer Menu */}
@@ -192,43 +192,43 @@ const MobileNavigation = () => {
               )}
 
               {/* Menu Items */}
-              <div className="space-y-2">
+              <div className="space-y-4">
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-xl shadow-sm p-4 flex flex-col gap-2">
                 <Link
                   to="/map"
                   onClick={handleNavClick}
-                  className={`flex items-center p-3 rounded-lg transition ${
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition text-base font-medium ${
                     isActive('/map')
-                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 shadow'
+                        : 'text-gray-700 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-blue-900/10'
                   }`}
                 >
-                  <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 4m0 13V4m-6 3l6-3" />
                   </svg>
-                  Map View
+                    Map
                 </Link>
-
                 <Link
                   to="/profile"
                   onClick={handleNavClick}
-                  className={`flex items-center p-3 rounded-lg transition ${
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition text-base font-medium ${
                     isActive('/profile')
-                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 shadow'
+                        : 'text-gray-700 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-blue-900/10'
                   }`}
                 >
-                  <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
                   Profile
                 </Link>
-
-                <div className="border-t border-gray-200 dark:border-gray-700 pt-2 mt-4">
+                </div>
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-xl shadow-sm p-4 flex flex-col gap-2 border-t border-gray-200 dark:border-gray-700">
                   <button
                     onClick={handleLogout}
-                    className="flex items-center w-full p-3 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg text-base font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
                   >
-                    <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                     </svg>
                     Logout

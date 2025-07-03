@@ -3,6 +3,29 @@ import type { BackgroundGeolocationPlugin, Location as BackgroundLocation } from
 import { ref, update } from 'firebase/database';
 import { realtimeDb } from './firebase';
 import { auth } from './firebase';
+import { LocalNotifications } from '@capacitor/local-notifications';
+
+// Helper: request notification permissions
+async function ensureNotificationPermission() {
+  const perms = await LocalNotifications.checkPermissions();
+  if (perms.display !== 'granted') {
+    await LocalNotifications.requestPermissions();
+  }
+}
+
+// Helper: notify user if tracking is paused/killed
+async function notifyTrackingPaused() {
+  await LocalNotifications.schedule({
+    notifications: [
+      {
+        title: 'Location Tracking Paused',
+        body: 'Please reopen the app to continue sharing your location.',
+        id: 1,
+        schedule: { at: new Date(Date.now() + 1000) },
+      }
+    ]
+  });
+}
 
 const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>('BackgroundGeolocation');
 
@@ -19,6 +42,7 @@ class BackgroundTrackingService {
 
     try {
       console.log('Initializing background tracking...');
+      await ensureNotificationPermission();
       // No explicit initialize method for this plugin
       this.isInitialized = true;
       console.log('✅ Background tracking initialized successfully');
@@ -53,6 +77,7 @@ class BackgroundTrackingService {
         async (location: BackgroundLocation | undefined, error?: any) => {
           if (error) {
             console.error('❌ Background GPS Error:', error);
+            await notifyTrackingPaused();
             return;
           }
 
@@ -74,6 +99,7 @@ class BackgroundTrackingService {
       console.log('✅ Background tracking started successfully with ID:', this.watcherId);
     } catch (error) {
       console.error('❌ Failed to start background tracking:', error);
+      await notifyTrackingPaused();
       throw error;
     }
   }
@@ -95,6 +121,7 @@ class BackgroundTrackingService {
       
       this.isTracking = false;
       console.log('✅ Background tracking stopped successfully');
+      await notifyTrackingPaused();
     } catch (error) {
       console.error('❌ Failed to stop background tracking:', error);
       throw error;

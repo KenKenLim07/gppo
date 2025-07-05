@@ -20,6 +20,12 @@ interface UserData {
   isSharingLocation?: boolean;
   status?: string;
   emergencyTriggeredAt?: number;
+  isHiddenFromMap?: boolean;
+  logoutTime?: number;
+  appClosedAt?: number;
+  gracePeriodExpired?: boolean;
+  clearedByAdmin?: boolean;
+  clearedAt?: number;
 }
 
 interface SystemStats {
@@ -46,8 +52,38 @@ const AdminDashboard = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showAllUsers, setShowAllUsers] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive' | 'tracking'>('all');
+  const [notifications, setNotifications] = useState<Array<{
+    id: string;
+    type: 'auto_unhide' | 'admin_action';
+    message: string;
+    timestamp: number;
+    userId?: string;
+    userName?: string;
+  }>>([]);
+  const [showAuditLog, setShowAuditLog] = useState(false);
+  const [auditLogs, setAuditLogs] = useState<Array<{
+    action: string;
+    userId: string;
+    userName: string;
+    timestamp: number;
+    reason?: string;
+    adminUid: string;
+  }>>([]);
 
   const isNative = Capacitor.isNativePlatform();
+
+  // Helper function to check if user is truly active (within 20 minutes)
+  const isUserActive = (userData: any): boolean => {
+    // If user has no location data, they're not active
+    if (!userData.lat || !userData.lng) return false;
+    
+    // If user has no lastUpdated time, they're not active
+    if (!userData.lastUpdated) return false;
+    
+    // Check if last update was within 20 minutes
+    const timeSinceUpdate = Date.now() - userData.lastUpdated;
+    return timeSinceUpdate < 20 * 60 * 1000; // 20 minutes
+  };
 
   // Redirect if not admin
   useEffect(() => {
@@ -71,6 +107,7 @@ const AdminDashboard = () => {
 
             snapshot.forEach((childSnapshot) => {
               const userData = childSnapshot.val();
+              const isActive = isUserActive(userData);
               const user: UserData = {
                 uid: childSnapshot.key!,
                 email: userData.email || '',
@@ -82,13 +119,19 @@ const AdminDashboard = () => {
                 lat: userData.lat,
                 lng: userData.lng,
                 lastUpdated: userData.lastUpdated,
-                isSharingLocation: !!(userData.lat && userData.lng),
+                isSharingLocation: isActive,
                 status: userData.status,
                 emergencyTriggeredAt: userData.emergencyTriggeredAt,
+                isHiddenFromMap: userData.isHiddenFromMap,
+                logoutTime: userData.logoutTime,
+                appClosedAt: userData.appClosedAt,
+                gracePeriodExpired: userData.gracePeriodExpired,
+                clearedByAdmin: userData.clearedByAdmin,
+                clearedAt: userData.clearedAt,
               };
 
               usersData.push(user);
-              if (user.isSharingLocation) {
+              if (isActive) {
                 activeCount++;
                 locationCount++;
               }
@@ -113,6 +156,55 @@ const AdminDashboard = () => {
     };
 
     fetchData();
+  }, [isAdmin]);
+
+  // Listen for auto-unhide events and audit logs
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    const fetchAuditData = async () => {
+      try {
+        // Listen for audit logs
+        const logsRef = ref(realtimeDb, 'auditLogs');
+        const unsubscribeLogs = onValue(logsRef, (snapshot) => {
+          
+          if (snapshot.exists()) {
+            const logs: Array<{
+              action: string;
+              userId: string;
+              userName: string;
+              timestamp: number;
+              reason?: string;
+              adminUid: string;
+            }> = [];
+
+            snapshot.forEach((childSnapshot) => {
+              const logData = childSnapshot.val();
+              logs.push({
+                action: logData.action,
+                userId: logData.userId,
+                userName: logData.userName,
+                timestamp: logData.timestamp,
+                reason: logData.reason,
+                adminUid: logData.adminUid,
+              });
+            });
+
+            // Sort by timestamp (newest first)
+            logs.sort((a, b) => b.timestamp - a.timestamp);
+            setAuditLogs(logs);
+
+
+          }
+        });
+
+        return () => unsubscribeLogs();
+      } catch (error) {
+        console.error('Error fetching audit data:', error);
+      }
+    };
+
+    fetchAuditData();
   }, [isAdmin]);
 
   const handleAdminAction = async (action: string, details: any) => {
@@ -204,10 +296,11 @@ const AdminDashboard = () => {
       icon: '📈', 
       permission: 'generateReports'
     },
+
     { 
-      id: 'logs', 
-      label: 'Logs', 
-      icon: '📋', 
+      id: 'audit', 
+      label: 'Audit Log', 
+      icon: '🔍', 
       permission: 'viewSystemLogs'
     },
     { 
@@ -244,6 +337,50 @@ const AdminDashboard = () => {
             </div>
             <div className="flex items-center space-x-4">
               <button
+                onClick={async () => {
+                  try {
+                    const { ref, set } = await import('firebase/database');
+                    const inactiveUsers = users.filter(user => {
+                      if (!user.lastUpdated) return true;
+                      const timeSinceUpdate = Date.now() - user.lastUpdated;
+                      return timeSinceUpdate > 20 * 60 * 1000; // 20 minutes
+                    });
+                    
+                    if (inactiveUsers.length === 0) {
+                      alert('No inactive users to clear');
+                      return;
+                    }
+                    
+                    if (confirm(`Clear ${inactiveUsers.length} inactive users? This will remove them from the map.`)) {
+                      for (const user of inactiveUsers) {
+                        await set(ref(realtimeDb, `users/${user.uid}`), {
+                          lat: null,
+                          lng: null,
+                          isSharingLocation: false,
+                          lastUpdated: null,
+                          clearedByAdmin: true,
+                          clearedAt: Date.now()
+                        });
+                      }
+                      
+                      handleAdminAction('clear_inactive_users', { 
+                        count: inactiveUsers.length,
+                        userIds: inactiveUsers.map(u => u.uid)
+                      });
+                      
+                      alert(`Cleared ${inactiveUsers.length} inactive users`);
+                    }
+                  } catch (error) {
+                    console.error('Error clearing inactive users:', error);
+                    alert('Error clearing inactive users');
+                  }
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors text-sm font-medium"
+              >
+                Clear Inactive Users
+              </button>
+
+              <button
                 onClick={() => navigate('/map')}
                 className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-md hover:from-blue-700 hover:to-blue-800 transition-all duration-200 shadow-sm hover:shadow-md text-sm font-medium"
               >
@@ -253,6 +390,46 @@ const AdminDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Notifications */}
+      {notifications.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+            <div className="space-y-2">
+              {notifications.slice(0, 3).map((notification) => (
+                <div
+                  key={notification.id}
+                  className={`flex items-center justify-between p-3 rounded-lg text-sm ${
+                    notification.type === 'auto_unhide'
+                      ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+                      : 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2">
+                    <span className="text-lg">
+                      {notification.type === 'auto_unhide' ? '🟢' : 'ℹ️'}
+                    </span>
+                    <span className="text-gray-700 dark:text-gray-300">
+                      {notification.message}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      {new Date(notification.timestamp).toLocaleTimeString()}
+                    </span>
+                    <button
+                      onClick={() => setNotifications(prev => prev.filter(n => n.id !== notification.id))}
+                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Enhanced Navigation Tabs */}
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
@@ -456,7 +633,12 @@ const AdminDashboard = () => {
                             </div>
                             <div>
                               <p className="text-sm font-semibold text-gray-900 dark:text-white">{user.name}</p>
-                              <p className="text-xs text-gray-500 dark:text-gray-400">{user.rank} • {user.station}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {user.rank} • {user.station}
+                                {user.isHiddenFromMap && (
+                                  <span className="ml-2 text-red-600 dark:text-red-400 font-medium">👁️ Hidden</span>
+                                )}
+                              </p>
                             </div>
                           </div>
                           <div className="flex items-center space-x-3">
@@ -476,6 +658,41 @@ const AdminDashboard = () => {
                                 Inactive
                               </span>
                             )}
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const { ref, set, get } = await import('firebase/database');
+                                  const userRef = ref(realtimeDb, `users/${user.uid}`);
+                                  
+                                  // Get current user data to preserve other fields
+                                  const snapshot = await get(userRef);
+                                  const currentData = snapshot.exists() ? snapshot.val() : {};
+                                  
+                                  // Toggle hidden status
+                                  const newHiddenStatus = !user.isHiddenFromMap;
+                                  await set(userRef, {
+                                    ...currentData,
+                                    isHiddenFromMap: newHiddenStatus
+                                  });
+                                  
+                                  // Log the action
+                                  handleAdminAction(newHiddenStatus ? 'hide_user' : 'unhide_user', { 
+                                    userId: user.uid, 
+                                    userName: user.name,
+                                    reason: newHiddenStatus ? 'Admin hid user' : 'Admin unhid user'
+                                  });
+                                } catch (error) {
+                                  console.error('Error toggling user visibility:', error);
+                                }
+                              }}
+                              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                                user.isHiddenFromMap
+                                  ? 'bg-green-600 text-white hover:bg-green-700'
+                                  : 'bg-red-600 text-white hover:bg-red-700'
+                              }`}
+                            >
+                              {user.isHiddenFromMap ? 'Show' : 'Hide'}
+                            </button>
                             <button
                               onClick={() => handleViewUserDetails(user)}
                               className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium"
@@ -532,16 +749,90 @@ const AdminDashboard = () => {
               </div>
             )}
 
-            {selectedTab === 'logs' && (
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8">
-                <div className="text-center">
-                  <div className="w-16 h-16 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-8 h-8 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
+
+
+            {selectedTab === 'audit' && (
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+
+                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Audit Log</h3>
+                      <div className="flex items-center space-x-2 text-sm">
+                        <span className="text-gray-500 dark:text-gray-400">{auditLogs.length} total entries</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setShowAuditLog(!showAuditLog)}
+                      className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium"
+                    >
+                      {showAuditLog ? 'Hide Details' : 'Show Details'}
+                    </button>
                   </div>
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">System Logs</h3>
-                  <p className="text-gray-500 dark:text-gray-400">System logs and audit trails will be displayed here.</p>
+                </div>
+                
+                <div className="p-6">
+                  {auditLogs.length === 0 ? (
+                    <div className="text-center py-8">
+                      <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No Audit Logs</h3>
+                      <p className="text-gray-500 dark:text-gray-400">No audit log entries found.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {auditLogs.slice(0, showAuditLog ? undefined : 10).map((log, index) => (
+                        <div
+                          key={index}
+                          className={`p-4 rounded-lg border ${
+                            log.action === 'auto_unhide_user'
+                              ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                              : log.action === 'hide_user' || log.action === 'unhide_user'
+                              ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                              : 'bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2 mb-2">
+                                <span className="text-lg">
+                                  {log.action === 'auto_unhide_user' ? '🟢' :
+                                   log.action === 'hide_user' ? '👁️' :
+                                   log.action === 'unhide_user' ? '👁️‍🗨️' : 'ℹ️'}
+                                </span>
+                                <span className="font-medium text-gray-900 dark:text-white">
+                                  {log.action === 'auto_unhide_user' ? 'Auto-Unhide User' :
+                                   log.action === 'hide_user' ? 'Hide User' :
+                                   log.action === 'unhide_user' ? 'Unhide User' :
+                                   log.action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                </span>
+                              </div>
+                              <div className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
+                                <div><strong>User:</strong> {log.userName} ({log.userId})</div>
+                                {log.reason && <div><strong>Reason:</strong> {log.reason}</div>}
+                                <div><strong>Time:</strong> {new Date(log.timestamp).toLocaleString()}</div>
+                                <div><strong>Admin:</strong> {log.adminUid === 'system_auto' ? 'System (Auto)' : log.adminUid}</div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {!showAuditLog && auditLogs.length > 10 && (
+                        <div className="text-center mt-4">
+                          <button
+                            onClick={() => setShowAuditLog(true)}
+                            className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium"
+                          >
+                            View all {auditLogs.length} audit entries →
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

@@ -17,9 +17,11 @@
     "@capacitor/geolocation": "^7.1.2",
     "@capacitor/local-notifications": "^7.0.1",
     "@capacitor/push-notifications": "^7.0.1",
+    "@types/leaflet.markercluster": "^1.5.5",
     "body-scroll-lock": "^4.0.0-beta.0",
     "firebase": "^11.9.1",
     "leaflet": "^1.9.4",
+    "leaflet.markercluster": "^1.5.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.6.3"

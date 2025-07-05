@@ -39,14 +39,14 @@ export const usePeriodicUpdates = (): UsePeriodicUpdatesReturn => {
     const setupInterval = () => {
       const intervalMs = getIntervalMs();
       lastIntervalMsRef.current = intervalMs;
-      periodicUpdateRef.current = setInterval(() => {
-        if (isSharing && lastKnownPosition) {
-          const currentTime = Date.now();
+    periodicUpdateRef.current = setInterval(() => {
+      if (isSharing && lastKnownPosition) {
+        const currentTime = Date.now();
           console.log("[Adaptive] Periodic update triggered at:", new Date(currentTime).toLocaleTimeString());
-          onUpdate(lastKnownPosition.lat, lastKnownPosition.lng, currentTime);
-        } else {
+        onUpdate(lastKnownPosition.lat, lastKnownPosition.lng, currentTime);
+      } else {
           console.log("[Adaptive] Periodic update skipped - conditions not met");
-        }
+      }
         // Check if speed category changed, and if so, restart interval
         const newInterval = getIntervalMs();
         if (newInterval !== lastIntervalMsRef.current) {

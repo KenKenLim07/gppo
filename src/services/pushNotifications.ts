@@ -40,3 +40,4 @@ export function registerPush() {
     // Handle notification tap if needed
   });
 }
+ 

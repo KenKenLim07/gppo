@@ -42,9 +42,39 @@ const MobileNavigation = () => {
   }, [locationError]);
 
   const handleLogout = async () => {
+    // Clean up location data on logout
+    if (user) {
+      try {
+        const { ref, set, get } = await import('firebase/database');
+        const { realtimeDb } = await import('../services/firebase');
+        
+        // First, get the current user data to preserve existing fields
+        const userRef = ref(realtimeDb, `users/${user.uid}`);
+        const snapshot = await get(userRef);
+        
+        let existingData = {};
+        if (snapshot.exists()) {
+          existingData = snapshot.val();
+        }
+        
+        // Immediately remove location data and set sharing to false
+        await set(userRef, {
+          ...existingData, // Preserve all existing fields (including isHiddenFromMap)
+          lat: null,
+          lng: null,
+          isSharingLocation: false,
+          lastUpdated: null,
+          logoutTime: Date.now()
+        });
+        
+        console.log('Location data cleaned up on logout');
+      } catch (error) {
+        console.error('Error cleaning up location data on logout:', error);
+      }
+    }
+    
     await signOut(auth);
-    navigate("/");
-    setDrawerOpen(false);
+    navigate('/');
   };
 
   const handleNavClick = () => {

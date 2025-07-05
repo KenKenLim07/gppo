@@ -14,10 +14,23 @@ export const updateLocationInFirebase = async (
   timestamp: number
 ): Promise<void> => {
   try {
-    await update(ref(realtimeDb, `users/${userId}`), {
+    // First, get the current user data to preserve existing fields
+    const { get } = await import('firebase/database');
+    const userRef = ref(realtimeDb, `users/${userId}`);
+    const snapshot = await get(userRef);
+    
+    let existingData = {};
+    if (snapshot.exists()) {
+      existingData = snapshot.val();
+    }
+    
+    // Update location while preserving all existing data
+    await update(userRef, {
+      ...existingData, // Preserve all existing fields (including isHiddenFromMap)
       lat,
       lng,
       lastUpdated: timestamp,
+      isSharingLocation: true, // Mark user as actively sharing location
     });
     
     console.log("Location updated:", { lat, lng, time: new Date(timestamp).toLocaleTimeString() });
@@ -29,6 +42,23 @@ export const updateLocationInFirebase = async (
 
 export const removeLocationFromFirebase = async (userId: string): Promise<void> => {
   try {
+    // First, get the current user data to preserve existing fields
+    const { get } = await import('firebase/database');
+    const userRef = ref(realtimeDb, `users/${userId}`);
+    const snapshot = await get(userRef);
+    
+    let existingData = {};
+    if (snapshot.exists()) {
+      existingData = snapshot.val();
+    }
+    
+    // Remove location data and set isSharingLocation to false while preserving other fields
+    await update(userRef, {
+      ...existingData, // Preserve all existing fields (including isHiddenFromMap)
+      isSharingLocation: false, // Mark user as not sharing location
+    });
+    
+    // Remove the location-specific fields
     const locationRef = ref(realtimeDb, `users/${userId}/lat`);
     const lngRef = ref(realtimeDb, `users/${userId}/lng`);
     const lastUpdatedRef = ref(realtimeDb, `users/${userId}/lastUpdated`);

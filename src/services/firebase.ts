@@ -4,7 +4,7 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics, isSupported } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth"; // optional, if using auth
+import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { getStorage } from "firebase/storage"; // optional, if using storage
 import { getDatabase } from "firebase/database";
 
@@ -30,6 +30,7 @@ isSupported().then((yes) => {
 // Export useful Firebase services
 export const db = getFirestore(app);       // Firestore
 export const auth = getAuth(app);          // Firebase Auth
+setPersistence(auth, browserLocalPersistence);
 export const storage = getStorage(app);    // Cloud Storage
 export const realtimeDb = getDatabase(app, "https://gppo-tracker-default-rtdb.asia-southeast1.firebasedatabase.app");
 export { app, analytics };

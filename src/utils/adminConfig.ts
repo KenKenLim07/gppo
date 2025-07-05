@@ -18,6 +18,7 @@ export interface AdminPermissions {
   editUsers: boolean;
   deleteUsers: boolean;
   resetUserPasswords: boolean;
+  manageUserVisibility: boolean;
   
   // Location & Tracking
   viewAllLocations: boolean;
@@ -54,6 +55,7 @@ export const SUPER_ADMIN_PERMISSIONS: AdminPermissions = {
   editUsers: true,
   deleteUsers: true,
   resetUserPasswords: true,
+  manageUserVisibility: true,
   
   // Location & Tracking - Full Control
   viewAllLocations: true,
@@ -150,6 +152,20 @@ export const adminUtils = {
     }
   },
   
+  // Update admin permissions to latest version
+  updateAdminPermissions: async (uid: string): Promise<void> => {
+    try {
+      const { ref, update } = await import('firebase/database');
+      const { realtimeDb } = await import('../services/firebase');
+      
+      const adminRef = ref(realtimeDb, `admins/${uid}`);
+      await update(adminRef, { permissions: SUPER_ADMIN_PERMISSIONS });
+      console.log('Admin permissions updated successfully');
+    } catch (error) {
+      console.error('Error updating admin permissions:', error);
+    }
+  },
+  
   // Log admin actions for audit trail
   logAdminAction: async (adminUid: string, action: string, details: any): Promise<void> => {
     try {
@@ -166,6 +182,19 @@ export const adminUtils = {
       
       const logsRef = ref(realtimeDb, 'adminLogs');
       await push(logsRef, logEntry);
+      
+      // Also log to audit log with proper format for admin dashboard
+      const auditLogEntry = {
+        action: action,
+        userId: details.userId || 'system',
+        userName: details.userName || 'System',
+        timestamp: Date.now(),
+        reason: details.reason || details.details?.reason || 'No reason provided',
+        adminUid: adminUid
+      };
+      
+      const auditLogsRef = ref(realtimeDb, 'auditLogs');
+      await push(auditLogsRef, auditLogEntry);
     } catch (error) {
       console.error('Error logging admin action:', error);
     }

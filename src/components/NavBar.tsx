@@ -117,6 +117,37 @@ const NavBar = () => {
   }, [menuOpen]);
 
   const handleLogout = async () => {
+    // Clean up location data on logout
+    if (user) {
+      try {
+        const { ref, set, get } = await import('firebase/database');
+        const { realtimeDb } = await import('../services/firebase');
+        
+        // First, get the current user data to preserve existing fields
+        const userRef = ref(realtimeDb, `users/${user.uid}`);
+        const snapshot = await get(userRef);
+        
+        let existingData = {};
+        if (snapshot.exists()) {
+          existingData = snapshot.val();
+        }
+        
+        // Immediately remove location data and set sharing to false
+        await set(userRef, {
+          ...existingData, // Preserve all existing fields (including isHiddenFromMap)
+          lat: null,
+          lng: null,
+          isSharingLocation: false,
+          lastUpdated: null,
+          logoutTime: Date.now()
+        });
+        
+        console.log('Location data cleaned up on logout');
+      } catch (error) {
+        console.error('Error cleaning up location data on logout:', error);
+      }
+    }
+    
     await signOut(auth);
     navigate("/");
   };
@@ -276,7 +307,7 @@ const NavBar = () => {
 
         {/* Professional Dropdown Mobile Menu */}
         <div className="relative md:hidden">
-          {menuOpen && (
+        {menuOpen && (
             <div
               ref={dropdownRef}
               id="mobile-menu-dropdown"
@@ -305,62 +336,62 @@ const NavBar = () => {
                 </div>
               )}
               <div className="flex flex-col py-2">
-                <Link
-                  to="/map"
-                  onClick={handleNavClick}
+              <Link
+                to="/map"
+                onClick={handleNavClick}
                   className={`flex items-center gap-3 px-5 py-3 text-base font-medium transition rounded-none hover:bg-blue-50 dark:hover:bg-blue-900/20 ${
-                    location.pathname === "/map"
+                  location.pathname === "/map"
                       ? "text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/30 font-bold"
                       : "text-gray-700 dark:text-gray-200"
-                  }`}
+                }`}
                   role="menuitem"
                   tabIndex={0}
-                >
+              >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 4m0 13V4m-6 3l6-3" /></svg>
-                  Map
-                </Link>
-                <Link
-                  to="/profile"
-                  onClick={handleNavClick}
+                Map
+              </Link>
+              <Link
+                to="/profile"
+                onClick={handleNavClick}
                   className={`flex items-center gap-3 px-5 py-3 text-base font-medium transition rounded-none hover:bg-blue-50 dark:hover:bg-blue-900/20 ${
-                    location.pathname === "/profile"
+                  location.pathname === "/profile"
                       ? "text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-900/30 font-bold"
                       : "text-gray-700 dark:text-gray-200"
-                  }`}
+                }`}
                   role="menuitem"
                   tabIndex={0}
-                >
+              >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                  Profile
-                </Link>
-                {isAdmin && (
-                  <Link
-                    to="/admin"
-                    onClick={handleNavClick}
+                Profile
+              </Link>
+              {isAdmin && (
+                <Link
+                  to="/admin"
+                  onClick={handleNavClick}
                     className={`flex items-center gap-3 px-5 py-3 text-base font-medium transition rounded-none hover:bg-red-50 dark:hover:bg-red-900/20 ${
-                      location.pathname.startsWith("/admin")
+                    location.pathname.startsWith("/admin")
                         ? "text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30 font-bold"
                         : "text-red-700 dark:text-red-300"
-                    }`}
+                  }`}
                     role="menuitem"
                     tabIndex={0}
-                  >
+                >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v4a1 1 0 001 1h3m10-5h2a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V7a2 2 0 012-2h2" /></svg>
-                    Admin
-                  </Link>
-                )}
-                <button
-                  onClick={handleLogout}
+                  Admin
+                </Link>
+              )}
+              <button
+                onClick={handleLogout}
                   className="flex items-center gap-3 px-5 py-3 text-base font-medium text-red-600 dark:text-red-400 transition rounded-none hover:bg-red-50 dark:hover:bg-red-900/20"
                   role="menuitem"
                   tabIndex={0}
-                >
+              >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                  Logout
-                </button>
-              </div>
+                Logout
+              </button>
             </div>
-          )}
+          </div>
+        )}
         </div>
       </nav>
 

@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster/dist/leaflet.markercluster.js";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { useTroops } from "../hooks/useTroops";
 import { Capacitor } from '@capacitor/core';
 import ChatModal from "./ChatModal";
 import { useAuth } from "../contexts/AuthContext";
 import { ref, set, get } from "firebase/database";
 import { realtimeDb } from "../services/firebase";
+import { useLocation } from '../contexts/LocationContext';
 
 // Emoji for each unit type
 const unitTypeEmojis: Record<string, string> = {
@@ -79,6 +83,7 @@ const statusColors: Record<string, string> = {
 const MapView = () => {
   const mapRef = useRef<L.Map | null>(null);
   const troopMarkers = useRef<Record<string, L.Marker>>({});
+  const markerClusterGroupRef = useRef<L.MarkerClusterGroup | null>(null);
   const troops = useTroops();
   const [chatOpen, setChatOpen] = useState(false);
   const { user } = useAuth();
@@ -87,6 +92,7 @@ const MapView = () => {
   const [statusLoading, setStatusLoading] = useState(false);
   const [statusSuccess, setStatusSuccess] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
+  const { locationData } = useLocation();
 
   useEffect(() => {
     if (!mapRef.current) {
@@ -94,10 +100,24 @@ const MapView = () => {
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "&copy; OpenStreetMap contributors",
       }).addTo(mapRef.current);
+      markerClusterGroupRef.current = L.markerClusterGroup({
+        iconCreateFunction: function(cluster) {
+          const count = cluster.getChildCount();
+          return L.divIcon({
+            html: `<div class="custom-cluster">${count}</div>`,
+            className: 'my-black-cluster',
+            iconSize: [28, 28]
+          });
+        }
+      });
+      mapRef.current.addLayer(markerClusterGroupRef.current);
     }
 
     // Update markers
-    troops.forEach((troop) => {
+    if (markerClusterGroupRef.current) {
+      markerClusterGroupRef.current.clearLayers();
+    }
+    troops.filter(troop => !troop.isHiddenFromMap).forEach((troop) => {
       const existingMarker = troopMarkers.current[troop.id];
       const isEmergency = troop.status === 'Emergency';
 
@@ -111,10 +131,12 @@ const MapView = () => {
       };
       const statusColor = statusColors[troop.status as keyof typeof statusColors] || '#6b7280';
       const statusLabel = troop.status || 'On Patrol';
+      const isCurrentUser = troop.id === user?.uid;
+      const displayName = troop.name || 'Unknown Officer';
       const popupHtml = `
         <div style="min-width: 180px; font-family: system-ui, sans-serif; padding: 6px 8px;">
           <div style="display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-size: 13px; color: #1f2937; margin-bottom: 4px; border-bottom: 1px solid #d1d5db; padding-bottom: 2px;">
-            <span>${troop.name || 'Unknown Officer'}</span>
+            <span>${displayName}</span>
             <span style="
               display: inline-block;
               font-size: 10px;
@@ -142,16 +164,20 @@ const MapView = () => {
           ` : ''}
           ${troop.lastUpdated ? `
             <div style="font-size: 9px; color: #374151; margin-top: 4px; padding-top: 2px; border-top: 1px solid #e5e7eb; font-weight: 700; opacity: 0.9; line-height: 1.2; display: flex; align-items: center; gap: 4px;">
-              <span style="color: #10b981;">📍</span> ${new Date(troop.lastUpdated).toLocaleString()}
+              <span style="margin-right: 4px;">📅 ${new Date(troop.lastUpdated).toLocaleDateString()}</span>
+              <span>⏰ ${new Date(troop.lastUpdated).toLocaleTimeString()}</span>
             </div>
           ` : ''}
+          <div style="margin-top: 8px; text-align: right;">
+            <a href="https://www.google.com/maps?q=${troop.lat},${troop.lng}" target="_blank" rel="noopener noreferrer" style="font-size: 12px; color: #2563eb; text-decoration: underline; font-weight: 600;">View in Google Maps</a>
+          </div>
         </div>
       `;
 
       // Defensive: ensure unitType is a valid key
       const safeUnitType: UnitTypeKey = isUnitTypeKey(troop.unitType) ? troop.unitType : 'Mobile Patrol';
       const isLive = isTroopLive(troop.lastUpdated);
-      const svgString = getOfficerSVGMarker({ unitType: safeUnitType, isEmergency, name: troop.name || '', isLive });
+      const svgString = getOfficerSVGMarker({ unitType: safeUnitType, isEmergency, name: isCurrentUser ? 'You' : troop.name || '', isLive });
       const svgUrl = "data:image/svg+xml;base64," + toBase64Unicode(svgString);
       const customIcon = L.icon({
         iconUrl: svgUrl,
@@ -163,9 +189,11 @@ const MapView = () => {
       if (existingMarker) {
         // Update existing marker with new position and icon
         existingMarker.setLatLng([troop.lat, troop.lng]).setPopupContent(popupHtml).setIcon(customIcon);
+        if (markerClusterGroupRef.current && !markerClusterGroupRef.current.hasLayer(existingMarker)) {
+          markerClusterGroupRef.current.addLayer(existingMarker);
+        }
       } else {
         const newMarker = L.marker([troop.lat, troop.lng], { icon: customIcon })
-          .addTo(mapRef.current!)
           .bindPopup(popupHtml);
 
         // Enhanced hover behavior with popup interaction
@@ -215,6 +243,9 @@ const MapView = () => {
         });
 
         troopMarkers.current[troop.id] = newMarker;
+        if (markerClusterGroupRef.current) {
+          markerClusterGroupRef.current.addLayer(newMarker);
+        }
       }
     });
 

@@ -1,6 +1,6 @@
 import { registerPlugin } from '@capacitor/core';
 import type { BackgroundGeolocationPlugin, Location as BackgroundLocation } from '@capacitor-community/background-geolocation';
-import { ref, update } from 'firebase/database';
+import { ref, update, get } from 'firebase/database';
 import { realtimeDb } from './firebase';
 import { auth } from './firebase';
 import { LocalNotifications } from '@capacitor/local-notifications';
@@ -136,7 +136,18 @@ class BackgroundTrackingService {
     }
 
     try {
-      await update(ref(realtimeDb, `users/${user.uid}`), {
+      // First, get the current user data to preserve existing fields
+      const userRef = ref(realtimeDb, `users/${user.uid}`);
+      const snapshot = await get(userRef);
+      
+      let existingData = {};
+      if (snapshot.exists()) {
+        existingData = snapshot.val();
+      }
+      
+      // Update location while preserving all existing data
+      await update(userRef, {
+        ...existingData, // Preserve all existing fields (including isHiddenFromMap)
         lat: location.latitude,
         lng: location.longitude,
         lastUpdated: location.time || Date.now(),
@@ -144,7 +155,8 @@ class BackgroundTrackingService {
         altitude: location.altitude,
         heading: location.bearing,
         speed: location.speed,
-        source: 'background'
+        source: 'background',
+        isSharingLocation: true // Mark user as actively sharing location
       });
 
       console.log('✅ Background location updated in Firebase');

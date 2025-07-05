@@ -47,6 +47,13 @@ export const AdminProvider = ({ children }: { children: React.ReactNode }) => {
           
           // Update last login
           await adminUtils.updateLastLogin(user.uid);
+          
+          // Update permissions to latest version (in case new permissions were added)
+          await adminUtils.updateAdminPermissions(user.uid);
+          
+          // Refresh admin data after updating permissions
+          const updatedAdminData = await adminUtils.getAdminUser(user.uid);
+          setAdminUser(updatedAdminData);
         } else {
           // Create super admin if doesn't exist
           await adminUtils.createSuperAdmin(

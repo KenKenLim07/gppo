@@ -1,25 +1,34 @@
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { Capacitor } from '@capacitor/core';
-import Login from "./pages/Login";
-import ProfileSetup from "./pages/ProfileSetup";
-import MapView from "./components/MapView";
-import SignUp from "./pages/SignUp";
-import AdminDashboard from "./pages/AdminDashboard";
+import { Suspense, lazy } from "react";
 import NavBar from "./components/NavBar";
 import MobileNavigation from "./components/MobileNavigation";
 import NetworkStatus from "./components/NetworkStatus";
 import RequireAuth from "./components/RequireAuth";
 import { useAuth } from "./contexts/AuthContext";
+import { useLocation as useLocationContext } from "./contexts/LocationContext";
 import { AdminProvider } from "./contexts/AdminContext";
 import { useEffect } from "react";
 import { registerPush } from "./services/pushNotifications";
+import { useAppCloseDetection } from "./hooks/useAppCloseDetection";
+
+// Replace static imports with lazy imports
+const Login = lazy(() => import("./pages/Login"));
+const ProfileSetup = lazy(() => import("./pages/ProfileSetup"));
+const MapView = lazy(() => import("./components/MapView"));
+const SignUp = lazy(() => import("./pages/SignUp"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 
 function AppRoutes() {
   const location = useLocation();
   const { user, loading } = useAuth();
+  const { isSharingLocation } = useLocationContext();
   
   // Detect platform
   const isNative = Capacitor.isNativePlatform();
+  
+  // Use app close detection hook
+  useAppCloseDetection(user?.uid || null, isSharingLocation);
   
   // Register push notifications on native platforms
   useEffect(() => {
@@ -44,34 +53,44 @@ function AppRoutes() {
       {showNavigation && (
         isNative ? <MobileNavigation /> : <NavBar />
       )}
-      <Routes>
-        <Route path="/" element={<Login />} />
-        <Route path="/signup" element={<SignUp />} />
-        <Route
-          path="/profile"
-          element={
-            <RequireAuth>
-              <ProfileSetup />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/map"
-          element={
-            <RequireAuth>
-              <MapView />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/admin/*"
-          element={
-            <RequireAuth>
-              <AdminDashboard />
-            </RequireAuth>
-          }
-        />
-      </Routes>
+      <Suspense fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <div className="text-gray-700 dark:text-gray-200 text-lg font-medium">Loading Guimaras Patrol...</div>
+            <div className="text-gray-500 dark:text-gray-400 text-sm mt-2">Initializing application</div>
+          </div>
+        </div>
+      }>
+        <Routes>
+          <Route path="/" element={<Login />} />
+          <Route path="/signup" element={<SignUp />} />
+          <Route
+            path="/profile"
+            element={
+              <RequireAuth>
+                <ProfileSetup />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/map"
+            element={
+              <RequireAuth>
+                <MapView />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/*"
+            element={
+              <RequireAuth>
+                <AdminDashboard />
+              </RequireAuth>
+            }
+          />
+        </Routes>
+      </Suspense>
     </>
   );
 }

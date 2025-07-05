@@ -18,6 +18,12 @@ export type Troop = {
   unitType?: string;
   callSign?: string;
   shift?: string;
+  isHiddenFromMap?: boolean;
+  logoutTime?: number;
+  appClosedAt?: number;
+  gracePeriodExpired?: boolean;
+  clearedByAdmin?: boolean;
+  clearedAt?: number;
 };
 
 export const useTroops = () => {

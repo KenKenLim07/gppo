@@ -244,6 +244,26 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
       setIsLive(true);
       lastLocationTimeRef.current = timestamp;
       lastKnownPositionRef.current = { lat: finalLat, lng: finalLng };
+      
+      // Simple auto-unhide: if user is hidden and sharing location, unhide them
+      if (user) {
+        const { ref, get, set } = await import('firebase/database');
+        const userRef = ref(realtimeDb, `users/${user.uid}`);
+        const snapshot = await get(userRef);
+        
+        if (snapshot.exists()) {
+          const userData = snapshot.val();
+          if (userData.isHiddenFromMap) {
+            // Auto-unhide user when they start sharing location
+            await set(userRef, {
+              ...userData,
+              isHiddenFromMap: false
+            });
+            console.log('User auto-unhidden after resuming duty');
+          }
+        }
+      }
+      
       // Try to flush any offline queue if online
       if (navigator.onLine) {
         flushOfflineQueue();
@@ -256,6 +276,8 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
       }
     }
   };
+
+
 
   const handleLocationError = (error: GeolocationPositionError) => {
     console.error("Error in continuous tracking:", error);
@@ -310,7 +332,7 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
     const handleOnline = () => {
       flushOfflineQueue();
       backoffRef.current = baseRetryDelay; // Reset backoff on reconnect
-    };
+  };
     window.addEventListener('online', handleOnline);
     return () => window.removeEventListener('online', handleOnline);
   }, []);

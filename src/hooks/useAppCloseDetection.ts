@@ -9,7 +9,7 @@ export const useAppCloseDetection = (userId: string | null, isSharingLocation: b
   useEffect(() => {
     if (!userId || !isSharingLocation) return;
 
-    const handleBeforeUnload = async (event: BeforeUnloadEvent) => {
+    const handleBeforeUnload = async () => {
       // Set app close time
       appCloseTimeRef.current = Date.now();
       
@@ -47,39 +47,7 @@ export const useAppCloseDetection = (userId: string | null, isSharingLocation: b
       }
     };
 
-    // Set up 5-minute grace period timer
-    const startGracePeriod = () => {
-      if (gracePeriodRef.current) {
-        clearTimeout(gracePeriodRef.current);
-      }
-      
-      gracePeriodRef.current = setTimeout(async () => {
-        try {
-          // First, get the current user data to preserve existing fields
-          const userRef = ref(realtimeDb, `users/${userId}`);
-          const snapshot = await get(userRef);
-          
-          let existingData = {};
-          if (snapshot.exists()) {
-            existingData = snapshot.val();
-          }
-          
-          // After 5 minutes, remove location data
-          await set(userRef, {
-            ...existingData, // Preserve all existing fields (including isHiddenFromMap)
-            lat: null,
-            lng: null,
-            isSharingLocation: false,
-            lastUpdated: null,
-            appClosedAt: null,
-            gracePeriodExpired: true
-          });
-          console.log('Grace period expired, user marked as offline');
-        } catch (error) {
-          console.error('Error expiring grace period:', error);
-        }
-      }, 5 * 60 * 1000); // 5 minutes
-    };
+
 
     // Listen for app close events
     window.addEventListener('beforeunload', handleBeforeUnload);

@@ -24,6 +24,17 @@ export type Troop = {
   gracePeriodExpired?: boolean;
   clearedByAdmin?: boolean;
   clearedAt?: number;
+  emergencyRoute?: {
+    nearestOfficerId: string;
+    nearestOfficerName: string;
+    distance: number;
+    estimatedTime: number;
+    drivingDistance: number;
+    drivingTime: number;
+    routeCoordinates: [number, number][];
+    turnByTurnDirections: string[];
+    googleMapsUrl: string;
+  };
 };
 
 export const useTroops = () => {

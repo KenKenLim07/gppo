@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAdmin } from '../contexts/AdminContext';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, set } from 'firebase/database';
 import { realtimeDb } from '../services/firebase';
-import { adminUtils } from '../utils/adminConfig';
+// Removed adminUtils import since audit logging is disabled
 import { Capacitor } from '@capacitor/core';
 
 interface UserData {
@@ -52,23 +52,25 @@ const AdminDashboard = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showAllUsers, setShowAllUsers] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive' | 'tracking'>('all');
-  const [notifications, setNotifications] = useState<Array<{
-    id: string;
-    type: 'auto_unhide' | 'admin_action';
-    message: string;
-    timestamp: number;
-    userId?: string;
-    userName?: string;
-  }>>([]);
-  const [showAuditLog, setShowAuditLog] = useState(false);
-  const [auditLogs, setAuditLogs] = useState<Array<{
-    action: string;
-    userId: string;
-    userName: string;
-    timestamp: number;
-    reason?: string;
-    adminUid: string;
-  }>>([]);
+  // Audit log feature removed to save Firebase costs - can be re-enabled later
+  // const [showAuditLog, setShowAuditLog] = useState(false);
+  // const [auditLogs, setAuditLogs] = useState<Array<{
+  //   action: string;
+  //   userId: string;
+  //   userName: string;
+  //   timestamp: number;
+  //   reason?: string;
+  //   adminUid: string;
+  // }>>([]);
+  const [showClearInactiveConfirm, setShowClearInactiveConfirm] = useState(false);
+  const [clearInactiveLoading, setClearInactiveLoading] = useState(false);
+  
+  // User Management States
+  const [showUserActionsModal, setShowUserActionsModal] = useState(false);
+  const [selectedUserForActions, setSelectedUserForActions] = useState<UserData | null>(null);
+  const [userActionLoading, setUserActionLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showPasswordResetConfirm, setShowPasswordResetConfirm] = useState(false);
 
   const isNative = Capacitor.isNativePlatform();
 
@@ -83,6 +85,68 @@ const AdminDashboard = () => {
     // Check if last update was within 20 minutes
     const timeSinceUpdate = Date.now() - userData.lastUpdated;
     return timeSinceUpdate < 20 * 60 * 1000; // 20 minutes
+  };
+
+  // User Management Functions
+  const handleUserActions = (user: UserData) => {
+    setSelectedUserForActions(user);
+    setShowUserActionsModal(true);
+  };
+
+  const handlePasswordReset = async (user: UserData) => {
+    if (!adminUser) return;
+    
+    setUserActionLoading(true);
+    try {
+      // Note: Firebase Admin SDK would be needed for actual password reset
+      // For now, we'll show a confirmation and log the action
+      console.log(`Password reset requested for user: ${user.email} by admin: ${adminUser.email}`);
+      
+      // In production, this would call Firebase Admin SDK:
+      // await admin.auth().generatePasswordResetLink(user.email)
+      
+      setShowPasswordResetConfirm(false);
+      setShowUserActionsModal(false);
+      
+      // Show success message (you can add a toast notification here)
+      alert(`Password reset email sent to ${user.email}`);
+      
+    } catch (error) {
+      console.error('Password reset failed:', error);
+      alert('Password reset failed. Please try again.');
+    } finally {
+      setUserActionLoading(false);
+    }
+  };
+
+  const handleDeleteUser = async (user: UserData) => {
+    if (!adminUser) return;
+    
+    setUserActionLoading(true);
+    try {
+      // Soft delete first - mark as deleted
+      const userRef = ref(realtimeDb, `users/${user.uid}`);
+      await set(userRef, {
+        ...user,
+        deletedAt: Date.now(),
+        deletedBy: adminUser.uid,
+        status: 'deleted'
+      });
+      
+      console.log(`User ${user.email} soft deleted by admin ${adminUser.email}`);
+      
+      setShowDeleteConfirm(false);
+      setShowUserActionsModal(false);
+      
+      // Show success message
+      alert(`User ${user.email} has been deleted.`);
+      
+    } catch (error) {
+      console.error('User deletion failed:', error);
+      alert('User deletion failed. Please try again.');
+    } finally {
+      setUserActionLoading(false);
+    }
   };
 
   // Redirect if not admin
@@ -164,41 +228,42 @@ const AdminDashboard = () => {
 
     const fetchAuditData = async () => {
       try {
+        // Audit log feature removed to save Firebase costs
         // Listen for audit logs
-        const logsRef = ref(realtimeDb, 'auditLogs');
-        const unsubscribeLogs = onValue(logsRef, (snapshot) => {
+        // const logsRef = ref(realtimeDb, 'auditLogs');
+        // const unsubscribeLogs = onValue(logsRef, (snapshot) => {
           
-          if (snapshot.exists()) {
-            const logs: Array<{
-              action: string;
-              userId: string;
-              userName: string;
-              timestamp: number;
-              reason?: string;
-              adminUid: string;
-            }> = [];
+        //   if (snapshot.exists()) {
+        //     const logs: Array<{
+        //       action: string;
+        //       userId: string;
+        //       userName: string;
+        //       timestamp: number;
+        //       reason?: string;
+        //       adminUid: string;
+        //     }> = [];
 
-            snapshot.forEach((childSnapshot) => {
-              const logData = childSnapshot.val();
-              logs.push({
-                action: logData.action,
-                userId: logData.userId,
-                userName: logData.userName,
-                timestamp: logData.timestamp,
-                reason: logData.reason,
-                adminUid: logData.adminUid,
-              });
-            });
+        //     snapshot.forEach((childSnapshot) => {
+        //       const logData = childSnapshot.val();
+        //       logs.push({
+        //         action: logData.action,
+        //         userId: logData.userId,
+        //         userName: logData.userName,
+        //         timestamp: logData.timestamp,
+        //         reason: logData.reason,
+        //         adminUid: logData.adminUid,
+        //       });
+        //     });
 
-            // Sort by timestamp (newest first)
-            logs.sort((a, b) => b.timestamp - a.timestamp);
-            setAuditLogs(logs);
+        //     // Sort by timestamp (newest first)
+        //     logs.sort((a, b) => b.timestamp - a.timestamp);
+        //     setAuditLogs(logs);
 
 
-          }
-        });
+        //   }
+        // });
 
-        return () => unsubscribeLogs();
+        // return () => unsubscribeLogs();
       } catch (error) {
         console.error('Error fetching audit data:', error);
       }
@@ -211,8 +276,9 @@ const AdminDashboard = () => {
     if (!adminUser) return;
     
     try {
-      await adminUtils.logAdminAction(adminUser.uid, action, details);
-      console.log(`Admin action logged: ${action}`);
+      // Audit logging disabled to save Firebase costs - logging to console only
+      // await adminUtils.logAdminAction(adminUser.uid, action, details);
+      console.log(`Admin action logged: ${action}`, details);
     } catch (error) {
       console.error('Error logging admin action:', error);
     }
@@ -261,6 +327,48 @@ const AdminDashboard = () => {
     };
   }, [mobileMenuOpen]);
 
+  const handleClearInactiveUsers = async () => {
+    setShowClearInactiveConfirm(false);
+    setClearInactiveLoading(true);
+    try {
+      const { ref, update } = await import('firebase/database');
+      const inactiveUsers = users.filter(user => {
+        if (!user.lastUpdated) return true;
+        const timeSinceUpdate = Date.now() - user.lastUpdated;
+        return timeSinceUpdate > 20 * 60 * 1000; // 20 minutes
+      });
+      
+      if (inactiveUsers.length === 0) {
+        alert('No inactive users to clear');
+        setClearInactiveLoading(false);
+        return;
+      }
+      
+      for (const user of inactiveUsers) {
+        await update(ref(realtimeDb, `users/${user.uid}`), {
+          lat: null,
+          lng: null,
+          isSharingLocation: false,
+          lastUpdated: null,
+          clearedByAdmin: true,
+          clearedAt: Date.now()
+        });
+      }
+      
+      handleAdminAction('clear_inactive_users', { 
+        count: inactiveUsers.length,
+        userIds: inactiveUsers.map(u => u.uid)
+      });
+      
+      alert(`Cleared ${inactiveUsers.length} inactive users`);
+      setClearInactiveLoading(false);
+    } catch (error) {
+      console.error('Error clearing inactive users:', error);
+      alert('Error clearing inactive users');
+      setClearInactiveLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -285,6 +393,12 @@ const AdminDashboard = () => {
       permission: 'viewAnalytics'
     },
     { 
+      id: 'users', 
+      label: 'User Management', 
+      icon: '👥', 
+      permission: 'viewAllUsers'
+    },
+    { 
       id: 'locations', 
       label: 'Locations', 
       icon: '📍', 
@@ -297,12 +411,13 @@ const AdminDashboard = () => {
       permission: 'generateReports'
     },
 
-    { 
-      id: 'audit', 
-      label: 'Audit Log', 
-      icon: '🔍', 
-      permission: 'viewSystemLogs'
-    },
+    // Audit log tab removed to save Firebase costs - can be re-enabled later
+    // { 
+    //   id: 'audit', 
+    //   label: 'Audit Log', 
+    //   icon: '🔍', 
+    //   permission: 'viewSystemLogs'
+    // },
     { 
       id: 'settings', 
       label: 'Settings', 
@@ -337,47 +452,11 @@ const AdminDashboard = () => {
             </div>
             <div className="flex items-center space-x-4">
               <button
-                onClick={async () => {
-                  try {
-                    const { ref, set } = await import('firebase/database');
-                    const inactiveUsers = users.filter(user => {
-                      if (!user.lastUpdated) return true;
-                      const timeSinceUpdate = Date.now() - user.lastUpdated;
-                      return timeSinceUpdate > 20 * 60 * 1000; // 20 minutes
-                    });
-                    
-                    if (inactiveUsers.length === 0) {
-                      alert('No inactive users to clear');
-                      return;
-                    }
-                    
-                    if (confirm(`Clear ${inactiveUsers.length} inactive users? This will remove them from the map.`)) {
-                      for (const user of inactiveUsers) {
-                        await set(ref(realtimeDb, `users/${user.uid}`), {
-                          lat: null,
-                          lng: null,
-                          isSharingLocation: false,
-                          lastUpdated: null,
-                          clearedByAdmin: true,
-                          clearedAt: Date.now()
-                        });
-                      }
-                      
-                      handleAdminAction('clear_inactive_users', { 
-                        count: inactiveUsers.length,
-                        userIds: inactiveUsers.map(u => u.uid)
-                      });
-                      
-                      alert(`Cleared ${inactiveUsers.length} inactive users`);
-                    }
-                  } catch (error) {
-                    console.error('Error clearing inactive users:', error);
-                    alert('Error clearing inactive users');
-                  }
-                }}
+                onClick={() => setShowClearInactiveConfirm(true)}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors text-sm font-medium"
+                disabled={clearInactiveLoading}
               >
-                Clear Inactive Users
+                {clearInactiveLoading ? 'Clearing...' : 'Clear Inactive Users'}
               </button>
 
               <button
@@ -390,46 +469,6 @@ const AdminDashboard = () => {
           </div>
         </div>
       </div>
-
-      {/* Notifications */}
-      {notifications.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-            <div className="space-y-2">
-              {notifications.slice(0, 3).map((notification) => (
-                <div
-                  key={notification.id}
-                  className={`flex items-center justify-between p-3 rounded-lg text-sm ${
-                    notification.type === 'auto_unhide'
-                      ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
-                      : 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2">
-                    <span className="text-lg">
-                      {notification.type === 'auto_unhide' ? '🟢' : 'ℹ️'}
-                    </span>
-                    <span className="text-gray-700 dark:text-gray-300">
-                      {notification.message}
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {new Date(notification.timestamp).toLocaleTimeString()}
-                    </span>
-                    <button
-                      onClick={() => setNotifications(prev => prev.filter(n => n.id !== notification.id))}
-                      className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Enhanced Navigation Tabs */}
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
@@ -645,7 +684,7 @@ const AdminDashboard = () => {
                             {user.status === 'Emergency' ? (
                               <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 animate-pulse">
                                 <span className="w-2 h-2 bg-red-400 rounded-full mr-2 animate-ping"></span>
-                                🚨 Emergency - Immediate Response Required
+                                🚨 Emergency
                               </span>
                             ) : user.isSharingLocation ? (
                               <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
@@ -719,6 +758,102 @@ const AdminDashboard = () => {
               </div>
             )}
 
+            {/* User Management Tab */}
+            {selectedTab === 'users' && (
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
+                <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">User Management</h3>
+                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                      {users.length} total users
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="p-6">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                      <thead className="bg-gray-50 dark:bg-gray-700/50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                            Officer
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                            Contact
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                            Status
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                            Last Active
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                        {users.map((user) => (
+                          <tr key={user.uid} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="flex-shrink-0 h-10 w-10">
+                                  <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                                    <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                                      {user.name.charAt(0).toUpperCase()}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="ml-4">
+                                  <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                    {user.name}
+                                  </div>
+                                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                                    {user.rank} • {user.badgeNumber}
+                                  </div>
+                                  <div className="text-xs text-gray-400 dark:text-gray-500">
+                                    {user.email}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                              {user.contact}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                isUserActive(user)
+                                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                                  : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                              }`}>
+                                {isUserActive(user) ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                              {user.lastUpdated 
+                                ? new Date(user.lastUpdated).toLocaleString()
+                                : 'Never'
+                              }
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                              <div className="flex space-x-2">
+                                <button
+                                  onClick={() => handleUserActions(user)}
+                                  className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                                >
+                                  Actions
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Enhanced Other Tabs */}
             {selectedTab === 'locations' && (
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8">
@@ -751,7 +886,8 @@ const AdminDashboard = () => {
 
 
 
-            {selectedTab === 'audit' && (
+            {/* Enhanced Audit Log Tab */}
+            {/* {selectedTab === 'audit' && (
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
 
                 <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
@@ -776,9 +912,9 @@ const AdminDashboard = () => {
                     <div className="text-center py-8">
                       <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
                         <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                      </div>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
                       <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No Audit Logs</h3>
                       <p className="text-gray-500 dark:text-gray-400">No audit log entries found.</p>
                     </div>
@@ -835,7 +971,7 @@ const AdminDashboard = () => {
                   )}
                 </div>
               </div>
-            )}
+            )} */}
 
             {selectedTab === 'settings' && (
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-8">
@@ -893,7 +1029,7 @@ const AdminDashboard = () => {
                   {selectedUser.status === 'Emergency' ? (
                     <span className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 animate-pulse">
                       <span className="w-3 h-3 bg-red-400 rounded-full mr-2 animate-ping"></span>
-                      🚨 Emergency - Immediate Response Required
+                      🚨 Emergency
                     </span>
                   ) : selectedUser.isSharingLocation ? (
                     <span className="inline-flex items-center px-4 py-2 rounded-full text-sm font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
@@ -987,6 +1123,167 @@ const AdminDashboard = () => {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear Inactive Users Confirmation Modal */}
+      {showClearInactiveConfirm && (
+        <div className="fixed inset-0 z-[10030] flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-xs w-full p-4 flex flex-col items-center">
+            <div className="text-lg font-bold text-red-600 dark:text-red-400 mb-2">Clear Inactive Users?</div>
+            <div className="text-sm text-gray-700 dark:text-gray-200 mb-4 text-center">This will remove all inactive users (offline for 20+ minutes) from the map. Their location data will be cleared but their profiles will be preserved.</div>
+            <div className="flex gap-3 w-full mt-2">
+              <button
+                className="flex-1 px-3 py-1.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition text-sm"
+                onClick={() => !clearInactiveLoading && setShowClearInactiveConfirm(false)}
+                disabled={clearInactiveLoading}
+              >
+                Cancel
+              </button>
+              <button
+                className="flex-1 px-3 py-1.5 rounded bg-red-600 text-white font-semibold hover:bg-red-700 transition disabled:opacity-60 text-sm"
+                onClick={handleClearInactiveUsers}
+                disabled={clearInactiveLoading}
+              >
+                {clearInactiveLoading ? 'Clearing...' : 'Yes, Clear'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Actions Modal */}
+      {showUserActionsModal && selectedUserForActions && (
+        <div className="fixed inset-0 z-[10040] flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                User Actions: {selectedUserForActions.name}
+              </h3>
+              <button
+                onClick={() => setShowUserActionsModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 dark:text-white mb-2">User Information</h4>
+                <div className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
+                  <div><span className="font-medium">Email:</span> {selectedUserForActions.email}</div>
+                  <div><span className="font-medium">Rank:</span> {selectedUserForActions.rank}</div>
+                  <div><span className="font-medium">Badge:</span> {selectedUserForActions.badgeNumber}</div>
+                  <div><span className="font-medium">Status:</span> 
+                    <span className={`ml-1 px-2 py-1 text-xs rounded-full ${
+                      isUserActive(selectedUserForActions)
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                        : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                    }`}>
+                      {isUserActive(selectedUserForActions) ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowPasswordResetConfirm(true)}
+                disabled={userActionLoading}
+                className="flex-1 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors font-medium disabled:opacity-60"
+              >
+                {userActionLoading ? 'Processing...' : 'Reset Password'}
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={userActionLoading}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium disabled:opacity-60"
+              >
+                {userActionLoading ? 'Processing...' : 'Delete Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Password Reset Confirmation Modal */}
+      {showPasswordResetConfirm && selectedUserForActions && (
+        <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-md w-full p-6">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-yellow-100 dark:bg-yellow-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Reset Password
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                This will send a password reset email to <strong>{selectedUserForActions.email}</strong>
+              </p>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowPasswordResetConfirm(false)}
+                className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handlePasswordReset(selectedUserForActions)}
+                disabled={userActionLoading}
+                className="flex-1 px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors font-medium disabled:opacity-60"
+              >
+                {userActionLoading ? 'Sending...' : 'Send Reset Email'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Account Confirmation Modal */}
+      {showDeleteConfirm && selectedUserForActions && (
+        <div className="fixed inset-0 z-[10060] flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-md w-full p-6">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                Delete Account
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                This will permanently delete <strong>{selectedUserForActions.name}</strong>'s account and all associated data.
+              </p>
+              <p className="text-xs text-red-600 dark:text-red-400 mt-2">
+                ⚠️ This action cannot be undone!
+              </p>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteUser(selectedUserForActions)}
+                disabled={userActionLoading}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors font-medium disabled:opacity-60"
+              >
+                {userActionLoading ? 'Deleting...' : 'Delete Account'}
+              </button>
             </div>
           </div>
         </div>

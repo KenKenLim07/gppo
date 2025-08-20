@@ -186,6 +186,13 @@ const NavBar = () => {
           </div>
           
           <div className="flex items-center space-x-2">
+            {/* Emergency Button - Show on web for testing */}
+            {!isNative && (
+              <div className="flex items-center">
+                <EmergencyButton variant="web" />
+              </div>
+            )}
+            
             {/* Location Toggle Switch - Show on both web and mobile */}
             <ToggleSwitch
               checked={isSharingLocation}
@@ -198,13 +205,6 @@ const NavBar = () => {
               error={null}
               isLive={isLive}
             />
-            
-            {/* Emergency Button - Show on web for testing */}
-            {!isNative && (
-              <div className="flex items-center">
-                <EmergencyButton variant="web" />
-              </div>
-            )}
             
             {/* Background Tracking Toggle Switch - Only show on native platforms */}
             {isNative && (
@@ -222,27 +222,33 @@ const NavBar = () => {
             )}
             
             {/* Desktop menu */}
-            <div className="hidden md:flex items-center space-x-4">
+            <div className="hidden md:flex items-center space-x-1">
               <Link
                 to="/map"
                 onClick={handleNavClick}
-                className={`text-sm font-medium transition ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                   location.pathname === "/map"
-                    ? "text-blue-600 dark:text-blue-400"
-                    : "text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
+                    ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
+                    : "text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-700/50"
                 }`}
               >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 4m0 13V4m-6 3l6-3" />
+                </svg>
                 Map
               </Link>
               <Link
                 to="/profile"
                 onClick={handleNavClick}
-                className={`text-sm font-medium transition ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                   location.pathname === "/profile"
-                    ? "text-blue-600 dark:text-blue-400"
-                    : "text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
+                    ? "text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800"
+                    : "text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-700/50"
                 }`}
               >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
                 Profile
               </Link>
               
@@ -251,20 +257,28 @@ const NavBar = () => {
                 <Link
                   to="/admin"
                   onClick={handleNavClick}
-                  className={`text-sm font-medium transition ${
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                     location.pathname.startsWith("/admin")
-                      ? "text-red-600 dark:text-red-400"
-                      : "text-red-700 dark:text-red-300 hover:text-red-600 dark:hover:text-red-400"
+                      ? "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"
+                      : "text-red-700 dark:text-red-300 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10"
                   }`}
                 >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
                   Admin
                 </Link>
               )}
               
+              <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-2"></div>
+              
               <button
                 onClick={handleLogout}
-                className="text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 transition"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 transition-all duration-200"
               >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
                 Logout
               </button>
             </div>

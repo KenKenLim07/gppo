@@ -89,9 +89,9 @@ export const getLocationErrorMessage = (error: GeolocationPositionError): string
   }
 };
 
-export const isLocationRecent = (lastUpdated: number, thresholdMs: number = 120000): boolean => {
+export const isLocationRecent = (lastUpdated: number, thresholdMs: number = 300000): boolean => {
   const timeDiff = Date.now() - lastUpdated;
-  return timeDiff < thresholdMs; // Default 2 minutes
+  return timeDiff < thresholdMs; // Default 5 minutes (changed from 2 minutes)
 };
 
 // Haversine formula to calculate distance between two lat/lng points in meters

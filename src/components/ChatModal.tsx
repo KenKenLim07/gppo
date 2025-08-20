@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-import { ref, push, onValue, off, get } from "firebase/database";
+import { ref, push, onValue, off, remove, get } from "firebase/database";
 import { realtimeDb } from "../services/firebase";
 import { useAuth } from "../contexts/AuthContext";
 import { disableBodyScroll, enableBodyScroll, clearAllBodyScrollLocks } from 'body-scroll-lock';
+import { useAdmin } from '../contexts/AdminContext';
 
 interface Message {
   id: string;
@@ -21,6 +22,7 @@ const CHAT_PATH = "/chats/global";
 
 const ChatModal = ({ open, onClose }: ChatModalProps) => {
   const { user } = useAuth();
+  const { isAdmin } = useAdmin();
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [isIncident, setIsIncident] = useState(false);
@@ -31,6 +33,9 @@ const ChatModal = ({ open, onClose }: ChatModalProps) => {
   const modalRef = useRef<HTMLDivElement | null>(null);
   const chatListRef = useRef<HTMLDivElement | null>(null);
   const overlayRef = useRef<HTMLDivElement | null>(null);
+  const [clearLoading, setClearLoading] = useState(false);
+  const [clearError, setClearError] = useState<string | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   // Prevent body scroll and trap touch events when modal is open
   useEffect(() => {
@@ -115,15 +120,53 @@ const ChatModal = ({ open, onClose }: ChatModalProps) => {
     }
   };
 
+  const handleClearChat = async () => {
+    setShowClearConfirm(false);
+    setClearLoading(true);
+    setClearError(null);
+    try {
+      await remove(ref(realtimeDb, CHAT_PATH));
+      // Audit logging disabled to save Firebase costs - can be re-enabled later
+      // Optionally log to audit log
+      // if (isAdmin && adminUser) {
+      //   const auditLogEntry = {
+      //     action: 'clear_chat',
+      //     userId: adminUser.uid,
+      //     userName: adminUser.name || adminUser.email || 'Admin',
+      //     timestamp: Date.now(),
+      //     reason: 'Admin cleared the global chat',
+      //     adminUid: adminUser.uid
+      //   };
+      //   await dbPush(dbRef(realtimeDb, 'auditLogs'), auditLogEntry);
+      // }
+      setClearLoading(false);
+    } catch (err) {
+      setClearError('Failed to clear chat.');
+      setClearLoading(false);
+    }
+  };
+
   if (!open) return null;
 
   return (
-    <div ref={overlayRef} className="fixed inset-0 z-[10020] flex items-center justify-center bg-black bg-opacity-40">
+    <div ref={overlayRef} className="fixed inset-0 z-[10040] flex items-center justify-center bg-black bg-opacity-40">
       <div ref={modalRef} className="bg-white dark:bg-gray-800 rounded-xl shadow-lg w-full max-w-md flex flex-col h-[70vh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
           <span className="font-bold text-gray-900 dark:text-white text-lg">Officer Chat</span>
-          <button onClick={onClose} className="text-gray-500 hover:text-red-500 text-xl">×</button>
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <button
+                onClick={() => setShowClearConfirm(true)}
+                className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold transition disabled:opacity-60"
+                disabled={clearLoading}
+                title="Clear all chat messages (admin only)"
+              >
+                {clearLoading ? 'Clearing...' : 'Clear Chat'}
+              </button>
+            )}
+            <button onClick={onClose} className="text-gray-500 hover:text-red-500 text-4xl p-0 m-0 border-none bg-transparent focus:outline-none">×</button>
+          </div>
         </div>
         {/* Chat List */}
         <div
@@ -169,8 +212,34 @@ const ChatModal = ({ open, onClose }: ChatModalProps) => {
             <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-1 rounded transition" disabled={loading || !text.trim()}>Send</button>
           </div>
           {error && <div className="text-xs text-red-500 text-center mt-1">{error}</div>}
+          {clearError && <div className="text-xs text-red-500 text-center mt-1">{clearError}</div>}
         </form>
       </div>
+      {/* Clear Chat Confirmation Modal */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 z-[10030] flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg max-w-xs w-full p-4 flex flex-col items-center">
+            <div className="text-lg font-bold text-red-600 dark:text-red-400 mb-2">Clear Chat?</div>
+            <div className="text-sm text-gray-700 dark:text-gray-200 mb-4 text-center">This will permanently delete all chat messages for all users. This action cannot be undone.</div>
+            <div className="flex gap-3 w-full mt-2">
+              <button
+                className="flex-1 px-3 py-1.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition text-sm"
+                onClick={() => !clearLoading && setShowClearConfirm(false)}
+                disabled={clearLoading}
+              >
+                Cancel
+              </button>
+              <button
+                className="flex-1 px-3 py-1.5 rounded bg-red-600 text-white font-semibold hover:bg-red-700 transition disabled:opacity-60 text-sm"
+                onClick={handleClearChat}
+                disabled={clearLoading}
+              >
+                {clearLoading ? 'Clearing...' : 'Yes, Clear'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

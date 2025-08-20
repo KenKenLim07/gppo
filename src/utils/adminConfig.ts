@@ -166,35 +166,12 @@ export const adminUtils = {
     }
   },
   
-  // Log admin actions for audit trail
+  // Log admin actions for audit trail (disabled - no DB writes)
   logAdminAction: async (adminUid: string, action: string, details: any): Promise<void> => {
     try {
-      const { ref, push } = await import('firebase/database');
-      const { realtimeDb } = await import('../services/firebase');
-      
-      const logEntry = {
-        adminUid,
-        action,
-        details,
-        timestamp: Date.now(),
-        ip: 'client-ip', // Would be captured from request in production
-      };
-      
-      const logsRef = ref(realtimeDb, 'adminLogs');
-      await push(logsRef, logEntry);
-      
-      // Also log to audit log with proper format for admin dashboard
-      const auditLogEntry = {
-        action: action,
-        userId: details.userId || 'system',
-        userName: details.userName || 'System',
-        timestamp: Date.now(),
-        reason: details.reason || details.details?.reason || 'No reason provided',
-        adminUid: adminUid
-      };
-      
-      const auditLogsRef = ref(realtimeDb, 'auditLogs');
-      await push(auditLogsRef, auditLogEntry);
+      // Completely disabled to avoid Firebase costs. Keep console for debugging.
+      console.log(`Admin action: ${action}`, { adminUid, details });
+      return;
     } catch (error) {
       console.error('Error logging admin action:', error);
     }

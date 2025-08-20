@@ -33,6 +33,10 @@ class BackgroundTrackingService {
   private isInitialized = false;
   private isTracking = false;
   private watcherId: string | null = null;
+  private heartbeatInterval: any = null;
+  private lastLocation: BackgroundLocation | null = null;
+  private lastUpdateTime: number = 0;
+  private HEARTBEAT_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
 
   async initialize(): Promise<void> {
     if (this.isInitialized) {
@@ -65,7 +69,6 @@ class BackgroundTrackingService {
     try {
       console.log('Starting background location tracking...');
 
-      // Add location watcher with proper options
       this.watcherId = await BackgroundGeolocation.addWatcher(
         {
           backgroundMessage: 'Guimaras Patrol is tracking your location',
@@ -82,25 +85,46 @@ class BackgroundTrackingService {
           }
 
           if (location) {
-            console.log('📡 Background location received:', {
-              lat: location.latitude,
-              lng: location.longitude,
-              accuracy: location.accuracy,
-              timestamp: location.time ? new Date(location.time).toLocaleString() : 'No timestamp'
-            });
-
-            // Update Firebase with background location
+            this.lastLocation = location;
+            this.lastUpdateTime = Date.now();
             await this.updateLocationInFirebase(location);
+            this.resetHeartbeat(); // Reset heartbeat on movement
           }
         }
       );
       
       this.isTracking = true;
+      this.startHeartbeat(); // Start heartbeat timer
       console.log('✅ Background tracking started successfully with ID:', this.watcherId);
     } catch (error) {
       console.error('❌ Failed to start background tracking:', error);
       await notifyTrackingPaused();
       throw error;
+    }
+  }
+
+  private startHeartbeat() {
+    this.stopHeartbeat();
+    this.heartbeatInterval = setInterval(async () => {
+      if (this.lastLocation && Date.now() - this.lastUpdateTime >= this.HEARTBEAT_INTERVAL_MS) {
+        await this.updateLocationInFirebase(this.lastLocation);
+        this.lastUpdateTime = Date.now();
+        console.log('[Heartbeat] Sent stationary heartbeat update');
+      }
+    }, this.HEARTBEAT_INTERVAL_MS);
+    console.log('[Heartbeat] Heartbeat system started with', this.HEARTBEAT_INTERVAL_MS / 1000, 'second interval');
+  }
+
+  private resetHeartbeat() {
+    this.lastUpdateTime = Date.now();
+    // Optionally, you can restart the interval here if you want
+  }
+
+  private stopHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+      console.log('[Heartbeat] Heartbeat system stopped');
     }
   }
 
@@ -113,13 +137,13 @@ class BackgroundTrackingService {
     try {
       console.log('Stopping background location tracking...');
 
-      // Remove the watcher
       if (this.watcherId) {
         await BackgroundGeolocation.removeWatcher({ id: this.watcherId });
         this.watcherId = null;
       }
       
       this.isTracking = false;
+      this.stopHeartbeat();
       console.log('✅ Background tracking stopped successfully');
       await notifyTrackingPaused();
     } catch (error) {

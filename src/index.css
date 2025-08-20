@@ -90,3 +90,31 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
 }
+
+/* Emergency Navigation Line Styles */
+.emergency-navigation-line {
+  animation: emergencyPulse 2s infinite;
+  filter: drop-shadow(0 0 4px rgba(220, 38, 38, 0.6));
+}
+
+@keyframes emergencyPulse {
+  0%, 100% {
+    opacity: 0.8;
+    filter: drop-shadow(0 0 4px rgba(220, 38, 38, 0.6));
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 8px rgba(220, 38, 38, 0.8));
+  }
+}
+
+/* Enhanced emergency marker styles */
+.emergency-marker {
+  filter: drop-shadow(0 0 6px rgba(220, 38, 38, 0.8));
+}
+
+/* Emergency route popup styles */
+.emergency-route-popup {
+  border-left: 4px solid #dc2626;
+  background: linear-gradient(135deg, #fef2f2 0%, #fecaca 100%);
+}

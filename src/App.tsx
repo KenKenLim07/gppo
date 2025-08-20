@@ -11,6 +11,7 @@ import { AdminProvider } from "./contexts/AdminContext";
 import { useEffect } from "react";
 import { registerPush } from "./services/pushNotifications";
 import { useAppCloseDetection } from "./hooks/useAppCloseDetection";
+import { backgroundTrackingService } from './services/backgroundTracking';
 
 // Replace static imports with lazy imports
 const Login = lazy(() => import("./pages/Login"));
@@ -18,6 +19,7 @@ const ProfileSetup = lazy(() => import("./pages/ProfileSetup"));
 const MapView = lazy(() => import("./components/MapView"));
 const SignUp = lazy(() => import("./pages/SignUp"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 
 function AppRoutes() {
   const location = useLocation();
@@ -37,11 +39,12 @@ function AppRoutes() {
     }
   }, [isNative]);
   
-  // Show navigation on all routes except login, signup, and profile, but only if user is authenticated
+  // Show navigation on all routes except login, signup, forgot, and profile, but only if user is authenticated
   // Don't show navigation while auth is loading to prevent flickering
   const showNavigation = !loading && user && (
     location.pathname !== "/" &&
     location.pathname !== "/signup" &&
+    location.pathname !== "/forgot" &&
     location.pathname !== "/profile"
   );
 
@@ -65,6 +68,7 @@ function AppRoutes() {
         <Routes>
           <Route path="/" element={<Login />} />
           <Route path="/signup" element={<SignUp />} />
+          <Route path="/forgot" element={<ForgotPassword />} />
           <Route
             path="/profile"
             element={
@@ -96,6 +100,15 @@ function AppRoutes() {
 }
 
 function App() {
+  useEffect(() => {
+    // Start tracking once on mount
+    backgroundTrackingService.startTracking();
+
+    // Optional: Clean up on unmount
+    return () => {
+      backgroundTrackingService.stopTracking();
+    };
+  }, []);
   return (
     <BrowserRouter>
       <AdminProvider>

@@ -57,9 +57,11 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
   const isSharingRef = useRef(false);
   const currentWatchIdRef = useRef<string | null>(null);
   const positionHistoryRef = useRef<{ lat: number; lng: number; timestamp: number }[]>([]);
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const MIN_MOVEMENT_METERS = 10; // Only update if moved at least 10 meters
   const MAX_ACCEPTABLE_ACCURACY = 50; // Only update if accuracy is better than 50m
+  const HEARTBEAT_INTERVAL = 3 * 60 * 1000; // 3 minutes for stationary users
 
   // Smoothing: moving average of last N positions
   const getSmoothedPosition = () => {
@@ -109,6 +111,42 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
       }
     }
     localStorage.removeItem(OFFLINE_QUEUE_KEY);
+  };
+
+  // Dedicated heartbeat system for stationary users
+  const startHeartbeat = () => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+    }
+    
+    heartbeatIntervalRef.current = setInterval(async () => {
+      if (isSharingRef.current && lastKnownPositionRef.current && user) {
+        const currentTime = Date.now();
+        console.log("[Heartbeat] Sending heartbeat update at:", new Date(currentTime).toLocaleTimeString());
+        
+        try {
+          await updateLocationInFirebase(
+            user.uid, 
+            lastKnownPositionRef.current.lat, 
+            lastKnownPositionRef.current.lng, 
+            currentTime
+          );
+          console.log("[Heartbeat] Heartbeat update successful");
+        } catch (error) {
+          console.error("[Heartbeat] Failed to send heartbeat:", error);
+        }
+      }
+    }, HEARTBEAT_INTERVAL);
+    
+    console.log("[Heartbeat] Heartbeat system started with", HEARTBEAT_INTERVAL / 1000, "second interval");
+  };
+
+  const stopHeartbeat = () => {
+    if (heartbeatIntervalRef.current) {
+      clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+      console.log("[Heartbeat] Heartbeat system stopped");
+    }
   };
 
   // Initialize background tracking service on mount
@@ -184,6 +222,7 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
       }
       clearLocationWatching(currentWatchIdRef.current);
       clearPeriodicUpdates();
+      stopHeartbeat(); // Stop heartbeat on unmount
     };
   }, [clearLocationWatching, clearPeriodicUpdates]);
 
@@ -253,12 +292,15 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
         
         if (snapshot.exists()) {
           const userData = snapshot.val();
+          console.log('[DEBUG] Checking auto-unhide - userData.isHiddenFromMap:', userData.isHiddenFromMap);
           if (userData.isHiddenFromMap) {
             // Auto-unhide user when they start sharing location
             await set(userRef, {
               ...userData,
               isHiddenFromMap: false
             });
+            
+            // Audit logging removed to save Firebase costs
             console.log('User auto-unhidden after resuming duty');
           }
         }
@@ -386,6 +428,9 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
       (lat, lng, timestamp) => handleLocationUpdate(lat, lng, timestamp, 0, true),
       getSpeed
     );
+
+    // Start dedicated heartbeat system
+    startHeartbeat();
   };
 
   const toggleLocation = async () => {
@@ -412,6 +457,7 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
       }
       clearLocationWatching(currentWatchIdRef.current);
       clearPeriodicUpdates();
+      stopHeartbeat(); // Stop heartbeat on location off
       
       currentWatchIdRef.current = null;
       lastKnownPositionRef.current = null;
@@ -430,6 +476,7 @@ export const LocationProvider = ({ children }: { children: React.ReactNode }) =>
     } else {
       // Turn on location sharing
       console.log("Turning ON location sharing");
+      console.log('[DEBUG] Location sharing turned ON - checking for auto-unhide...');
       setLocationError(null);
       
       if (!navigator.geolocation) {

@@ -4,7 +4,7 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics, isSupported } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore";
-import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
+import { getAuth, setPersistence, browserLocalPersistence, browserSessionPersistence, inMemoryPersistence } from "firebase/auth";
 import { getStorage } from "firebase/storage"; // optional, if using storage
 import { getDatabase } from "firebase/database";
 
@@ -30,7 +30,20 @@ isSupported().then((yes) => {
 // Export useful Firebase services
 export const db = getFirestore(app);       // Firestore
 export const auth = getAuth(app);          // Firebase Auth
-setPersistence(auth, browserLocalPersistence);
+
+// Robust persistence with fallbacks for Safari Private Mode or restricted storage
+(async () => {
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+  } catch {
+    try {
+      await setPersistence(auth, browserSessionPersistence);
+    } catch {
+      await setPersistence(auth, inMemoryPersistence);
+    }
+  }
+})();
+
 export const storage = getStorage(app);    // Cloud Storage
 export const realtimeDb = getDatabase(app, "https://gppo-tracker-default-rtdb.asia-southeast1.firebasedatabase.app");
 export { app, analytics };

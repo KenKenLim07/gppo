@@ -10,7 +10,9 @@ import ChatModal from "./ChatModal";
 import { useAuth } from "../contexts/AuthContext";
 import { ref, set, get } from "firebase/database";
 import { realtimeDb } from "../services/firebase";
-import { useLocation } from '../contexts/LocationContext';
+// Temporarily disabled emergency notifications feature
+// import EmergencyNotificationModal from "./EmergencyNotificationModal";
+import TurnByTurnDirections from "./TurnByTurnDirections";
 
 // Emoji for each unit type
 const unitTypeEmojis: Record<string, string> = {
@@ -45,7 +47,7 @@ function getOfficerSVGMarker({ unitType, isEmergency, name, isLive }: { unitType
   const hollowOpacity = isEmergency ? 0.5 : 0.35;
   const dotOpacity = isEmergency ? 1 : (!isLive ? 0.5 : 0.7);
   const animatePulse = isLive;
-  const centerDotColor = !isLive ? '#9ca3af' : '#22c55e'; // grey if offline, green if live
+  const centerDotColor = !isLive ? '#9ca3af' : (isEmergency ? '#dc2626' : '#22c55e'); // red if emergency, green if live, grey if offline
   // 44x76 marker, tip at (22, 62)
   // Name label below marker (SVG foreignObject for HTML styling)
   const nameLabel = name ? `
@@ -84,6 +86,7 @@ const MapView = () => {
   const mapRef = useRef<L.Map | null>(null);
   const troopMarkers = useRef<Record<string, L.Marker>>({});
   const markerClusterGroupRef = useRef<L.MarkerClusterGroup | null>(null);
+  const navigationLinesRef = useRef<Record<string, L.Polyline>>({});
   const troops = useTroops();
   const [chatOpen, setChatOpen] = useState(false);
   const { user } = useAuth();
@@ -92,7 +95,11 @@ const MapView = () => {
   const [statusLoading, setStatusLoading] = useState(false);
   const [statusSuccess, setStatusSuccess] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
-  const { locationData } = useLocation();
+  // Temporarily disabled emergency notifications feature
+  // const [emergencyNotificationsOpen, setEmergencyNotificationsOpen] = useState(false);
+  const [turnByTurnOpen, setTurnByTurnOpen] = useState(false);
+  const [currentEmergencyRoute, setCurrentEmergencyRoute] = useState<any>(null);
+
 
   useEffect(() => {
     if (!mapRef.current) {
@@ -256,6 +263,44 @@ const MapView = () => {
         delete troopMarkers.current[id];
       }
     });
+
+    // Handle emergency navigation lines
+    if (mapRef.current) {
+      // Clear existing navigation lines
+      Object.values(navigationLinesRef.current).forEach(line => {
+        if (mapRef.current) {
+          mapRef.current.removeLayer(line);
+        }
+      });
+      navigationLinesRef.current = {};
+
+      // Find emergency officers and draw navigation lines
+      const emergencyOfficers = troops.filter(troop => 
+        troop.status === 'Emergency' && 
+        troop.lat && 
+        troop.lng &&
+        (troop as any).emergencyRoute // Check if emergency route data exists
+      );
+
+      emergencyOfficers.forEach(emergencyOfficer => {
+        const emergencyRoute = (emergencyOfficer as any).emergencyRoute;
+        if (emergencyRoute && emergencyRoute.routeCoordinates) {
+          // Disabled: Create navigation line
+          // const navigationLine = L.polyline(emergencyRoute.routeCoordinates, {
+          //   color: '#dc2626', // Red color for emergency
+          //   weight: 4,
+          //   opacity: 0.8,
+          //   dashArray: '10, 5', // Dashed line
+          //   className: 'emergency-navigation-line'
+          // });
+
+          // Disabled: Add popup with route information
+          // navigationLine.bindPopup(popupContent);
+          // navigationLine.addTo(mapRef.current!);
+          // navigationLinesRef.current[emergencyOfficer.id] = navigationLine;
+        }
+      });
+    }
   }, [troops]);
 
   // Fetch current status on mount
@@ -269,6 +314,21 @@ const MapView = () => {
       }
     });
   }, [user]);
+
+  // Add global function for turn-by-turn directions
+  useEffect(() => {
+    (window as any).showTurnByTurnDirections = (emergencyOfficerId: string) => {
+      const emergencyOfficer = troops.find(troop => troop.id === emergencyOfficerId);
+      if (emergencyOfficer && emergencyOfficer.emergencyRoute) {
+        setCurrentEmergencyRoute(emergencyOfficer.emergencyRoute);
+        setTurnByTurnOpen(true);
+      }
+    };
+
+    return () => {
+      delete (window as any).showTurnByTurnDirections;
+    };
+  }, [troops]);
 
   const handleStatusChange = async (newStatus: string) => {
     setStatus(newStatus);
@@ -298,6 +358,17 @@ const MapView = () => {
   return (
     <div className={mapContainerClass}>
       <div id="map" className="w-full h-full"></div>
+      {/* Floating Emergency Notifications Button - Temporarily Disabled */}
+      {/* 
+      <button
+        className="fixed bottom-56 left-4 z-[10010] bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg w-12 h-12 flex items-center justify-center text-2xl"
+        onClick={() => setEmergencyNotificationsOpen(true)}
+        aria-label="Emergency Notifications"
+      >
+        <span>🚨</span>
+      </button>
+      */}
+
       {/* Floating Chat Button */}
       <button
         className="fixed bottom-40 left-4 z-[10010] bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg w-12 h-12 flex items-center justify-center text-2xl"
@@ -312,21 +383,21 @@ const MapView = () => {
           className="fixed bottom-24 left-4 z-[10011] flex flex-col items-start"
         >
           <button
-            className={`flex items-center gap-2 px-3 py-2 rounded-full shadow-lg text-white font-semibold text-sm focus:outline-none transition-all ${statusColors[status] || "bg-gray-500"}`}
+            className={`flex flex-col items-center gap-1 px-2 py-1.5 rounded-lg shadow-lg text-white font-medium text-xs focus:outline-none transition-all ${statusColors[status] || "bg-gray-500"}`}
             onClick={() => setStatusModalOpen(true)}
             aria-label="Update Status"
           >
-            <span className="w-2 h-2 rounded-full bg-white/80 mr-1" />
-            {status}
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Status</span>
+            <span className="text-[9px] opacity-90">{status}</span>
           </button>
         </div>
       )}
       {/* Status Modal */}
-      {statusModalOpen && (
+      {statusModalOpen && 
         <div className="fixed inset-0 z-[10020] flex items-center justify-center bg-black bg-opacity-40">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg w-full max-w-xs p-6 flex flex-col items-center relative">
             <button
-              className="absolute top-2 right-2 text-gray-400 hover:text-red-500 text-xl"
+              className="absolute -top-3 -right-5 text-gray-400 hover:text-red-500 text-4xl transition-colors bg-transparent border-none outline-none focus:outline-none"
               onClick={() => setStatusModalOpen(false)}
               aria-label="Close"
             >
@@ -351,8 +422,24 @@ const MapView = () => {
             {statusError && <div className="text-xs text-red-600 mt-4">{statusError}</div>}
           </div>
         </div>
-      )}
+      }
       <ChatModal open={chatOpen} onClose={() => setChatOpen(false)} />
+      {/* Emergency Notification Modal - Temporarily Disabled */}
+      {/*
+      <EmergencyNotificationModal 
+        isOpen={emergencyNotificationsOpen} 
+        onClose={() => setEmergencyNotificationsOpen(false)} 
+      />
+      */}
+      
+      <TurnByTurnDirections
+        isOpen={turnByTurnOpen}
+        onClose={() => setTurnByTurnOpen(false)}
+        directions={currentEmergencyRoute?.turnByTurnDirections || []}
+        googleMapsUrl={currentEmergencyRoute?.googleMapsUrl || ''}
+        distance={currentEmergencyRoute?.drivingDistance || currentEmergencyRoute?.distance || 0}
+        estimatedTime={currentEmergencyRoute?.drivingTime || currentEmergencyRoute?.estimatedTime || 0}
+      />
     </div>
   );
 };

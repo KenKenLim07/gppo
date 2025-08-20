@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../services/firebase";
 import { ref, get } from "firebase/database";
 import { realtimeDb } from "../services/firebase";
 import { isProfileComplete } from "../utils/profileUtils";
+import ReusableFloatingLabelInput from "../components/ui/ReusableFloatingLabelInput";
 
 const SignUp = () => {
   const [email, setEmail] = useState("");
@@ -17,27 +18,10 @@ const SignUp = () => {
   const [attempts, setAttempts] = useState(0);
   const navigate = useNavigate();
 
-  // Get generic time greeting (removed "Officer" reference)
-  const getTimeGreeting = () => {
-    const now = new Date();
-    const philippineTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-    const hour = philippineTime.getHours();
-    
-    if (hour >= 5 && hour < 12) {
-      return "Good Morning";
-    } else if (hour >= 12 && hour < 17) {
-      return "Good Afternoon";
-    } else if (hour >= 17 && hour < 21) {
-      return "Good Evening";
-    } else {
-      return "Good Night";
-    }
-  };
+
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Rate limiting - prevent abuse
     if (attempts >= 3) {
       setError("Too many signup attempts. Please try again later.");
       return;
@@ -48,8 +32,6 @@ const SignUp = () => {
       setError("Passwords do not match.");
       return;
     }
-    
-    // Password strength validation
     if (password.length < 8) {
       setError("Password must be at least 8 characters long.");
       return;
@@ -60,24 +42,24 @@ const SignUp = () => {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
-      // Check if user has a complete profile (unlikely for new signup, but good practice)
+      try {
       const profileRef = ref(realtimeDb, `users/${user.uid}`);
       const snapshot = await get(profileRef);
-      
       if (snapshot.exists()) {
         const profile = snapshot.val();
         if (isProfileComplete(profile)) {
-          navigate("/map"); // Complete profile → go to map
+            navigate("/map");
+          } else {
+            navigate("/profile?edit=true");
+          }
         } else {
-          navigate("/profile"); // Incomplete profile → complete setup
+          navigate("/profile?edit=true");
         }
-      } else {
-        navigate("/profile"); // No profile → create one
+      } catch (_dbErr) {
+        navigate("/profile?edit=true");
       }
     } catch (err: any) {
       setAttempts(prev => prev + 1);
-      
-      // Generic error messages for security
       if (err.code === 'auth/email-already-in-use') {
         setError("An account with this email already exists.");
       } else if (err.code === 'auth/weak-password') {
@@ -95,96 +77,172 @@ const SignUp = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900 p-6">
-      <form
-        onSubmit={handleSignUp}
-        className="bg-white dark:bg-gray-800 p-8 rounded shadow-md w-full max-w-md"
-      >
-        <div className="flex flex-col items-center mb-6">
-          <h2 className="text-2xl font-bold mb-1 text-gray-900 dark:text-white">
-            {getTimeGreeting()}, Officer
-          </h2>
-          <p className="text-gray-500 dark:text-gray-300 text-sm">
-            Create your officer account
-          </p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-6 relative overflow-hidden">
+      {/* Background Pattern */}
+      <div className="absolute inset-0 opacity-10">
+        <div className="absolute inset-0" style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Cpath d='M30 30c0-11.046-8.954-20-20-20s-20 8.954-20 20 8.954 20 20 20 20-8.954 20-20zm0 0c0 11.046 8.954 20 20 20s20-8.954 20-20-8.954-20-20-20-20 8.954-20 20z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+        }} />
+      </div>
+
+      <div className="relative z-10 w-full max-w-md">
+        {/* RESTRICTED ACCESS Header */}
+        <div className="text-center mb-8">
+          <div className="bg-red-600/20 border border-red-500/30 rounded-lg p-6 mb-6">
+            <div className="flex items-center justify-center mb-3">
+              <svg className="w-6 h-6 text-red-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              <span className="text-red-300 font-bold text-lg">RESTRICTED ACCESS</span>
+            </div>
+            <p className="text-red-200 text-sm leading-relaxed">
+              This system is restricted to authorized Guimaras Provincial Police personnel only. 
+              Unauthorized access attempts will be logged and reported. 
+              If you are not authorized personnel, please exit immediately.
+            </p>
+          </div>
         </div>
-        {error && <p className="text-red-500 mb-3">{error}</p>}
-        <input
+
+        {/* Signup Form */}
+        <div className="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl border border-white/20 p-8">
+          <div className="text-center mb-6">
+            <h2 className="text-xl font-semibold text-white mb-1">Guimaras Provincial Police</h2>
+            <p className="text-blue-200 text-sm">Complete your account registration</p>
+          </div>
+
+          {error && (
+            <div className="mb-4 rounded-lg bg-red-500/20 border border-red-400/30 p-3 text-sm text-red-200">
+              <div className="flex items-center">
+                <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                {error}
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={handleSignUp} className="space-y-4">
+            <ReusableFloatingLabelInput
+              id="email"
           type="email"
-          placeholder="Email"
+              label="Official Email"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full p-2 mb-3 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+              autoComplete="email"
           required
+              inputClassName="bg-white/10 border-white/20 text-white placeholder-white/50 focus:border-green-400 focus:ring-green-400"
+              labelClassName="text-blue-200"
         />
-        <div className="relative mb-3">
-          <input
+
+            <div className="relative">
+              <ReusableFloatingLabelInput
+                id="password"
             type={showPassword ? "text" : "password"}
-            placeholder="Password"
+                label="Password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full p-2 pr-10 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
+                inputClassName="pr-10 bg-white/10 border-white/20 text-white placeholder-white/50 focus:border-green-400 focus:ring-green-400"
+                labelClassName="text-blue-200"
+                autoComplete="new-password"
             required
           />
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors border-0 outline-none focus:outline-none focus:ring-0 focus:border-0"
+                className="absolute inset-y-0 end-0 flex items-center z-20 px-3 cursor-pointer text-blue-200 hover:text-white transition-colors"
+                aria-label={showPassword ? "Hide password" : "Show password"}
           >
+                <svg className="shrink-0 size-3.5" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             {showPassword ? (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
-              </svg>
+                    <>
+                      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </>
             ) : (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    <>
+                      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path>
+                      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"></path>
+                      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"></path>
+                      <line x1="2" x2="22" y1="2" y2="22"></line>
+                    </>
+                  )}
               </svg>
-            )}
           </button>
         </div>
-        <div className="relative mb-3">
-          <input
+
+            <div className="relative">
+              <ReusableFloatingLabelInput
+                id="confirmPassword"
             type={showConfirmPassword ? "text" : "password"}
-            placeholder="Confirm Password"
+                label="Confirm Password"
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            className="w-full p-2 pr-10 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfirmPassword(e.target.value)}
+                inputClassName="pr-10 bg-white/10 border-white/20 text-white placeholder-white/50 focus:border-green-400 focus:ring-green-400"
+                labelClassName="text-blue-200"
+                autoComplete="new-password"
             required
           />
           <button
             type="button"
             onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-            className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors border-0 outline-none focus:outline-none focus:ring-0 focus:border-0"
+                className="absolute inset-y-0 end-0 flex items-center z-20 px-3 cursor-pointer text-blue-200 hover:text-white transition-colors"
+                aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
           >
+                <svg className="shrink-0 size-3.5" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             {showConfirmPassword ? (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
-              </svg>
+                    <>
+                      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path>
+                      <circle cx="12" cy="12" r="3"></circle>
+                    </>
             ) : (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    <>
+                      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path>
+                      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"></path>
+                      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"></path>
+                      <line x1="2" x2="22" y1="2" y2="22"></line>
+                    </>
+                  )}
               </svg>
-            )}
           </button>
         </div>
+
         <button
           type="submit"
-          className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 font-semibold transition"
+              className="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-semibold transition-all duration-200 transform hover:scale-[1.02] disabled:opacity-60 disabled:transform-none shadow-lg"
           disabled={loading || attempts >= 3}
         >
-          {loading ? "Creating Account..." : "Sign Up"}
+              {loading ? (
+                <div className="flex items-center justify-center">
+                  <svg className="animate-spin -ml-1 mr-3 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Creating Account...
+                </div>
+              ) : (
+                "Create Account"
+              )}
         </button>
-        <div className="mt-4 text-center">
-          <span className="text-gray-600 dark:text-gray-300 text-sm">
-            Already have an account?{" "}
-            <a href="/" className="text-blue-600 hover:underline">
-              Login
-            </a>
+          </form>
+
+          <div className="mt-6 text-center">
+            <span className="text-blue-200 text-sm">
+              Already have access?{" "}
+              <Link to="/" className="text-blue-300 hover:text-white transition-colors font-medium underline hover:no-underline">
+                Sign In
+            </Link>
           </span>
+          </div>
         </div>
-      </form>
+
+
+
+        {/* Footer */}
+        <div className="mt-6 text-center text-blue-200/60 text-xs">
+          <p>© 2024 Guimaras Provincial Police Office</p>
+          <p className="mt-1">Secure • Reliable • Professional</p>
+        </div>
+      </div>
     </div>
   );
 };

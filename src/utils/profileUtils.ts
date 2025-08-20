@@ -4,6 +4,8 @@ export const isProfileComplete = (profile: any): boolean => {
     profile?.rank &&
     profile?.contact &&
     profile?.station &&
-    profile?.badgeNumber
+    profile?.badgeNumber &&
+    profile?.unitType &&
+    profile?.shift
   );
 }; 
